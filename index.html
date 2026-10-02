@@ -91,6 +91,7 @@ tr.new td{animation:newrow 2.4s ease-out}@keyframes newrow{0%{background:oklch(8
 .gate input{height:50px;border-radius:14px;border:.5px solid var(--hairline);background:var(--fill);padding:0 14px;font-size:16px;outline:none}
 .gate input:focus{box-shadow:0 0 0 3px oklch(60% .145 40/.22)}
 .gate .btn.pri{height:50px;font-size:16px}
+.keep{display:flex;align-items:center;justify-content:center;gap:8px;font-size:14px;color:var(--ink-2)}.keep input{width:17px;height:17px;accent-color:var(--clay)}
 .err{color:var(--danger);font-size:13.5px;font-weight:600;min-height:18px;text-align:center}
 ol{margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:6px;font-size:14px}code{font-size:12.5px;background:var(--fill);padding:1px 6px;border-radius:6px}
 @media (max-width:900px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi.hero{grid-column:1/-1}.main{grid-template-columns:minmax(0,1fr)}#map{height:300px}}
@@ -99,7 +100,8 @@ ol{margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:6px
 <div id="setup" class="gate" hidden><div class="card"><img src="logo.svg" alt=""><h1>Connect Supabase</h1>
   <p class="muted">This dashboard isn't connected yet. Put the project URL and the public (anon) key in <code>config.js</code>.</p></div></div>
 <div id="login" class="gate" hidden><form class="card" id="lf"><img src="logo.svg" alt=""><h1>Beitna Analytics</h1><p class="muted">Owner sign-in</p>
-  <input id="em" type="email" autocomplete="username" placeholder="Email" required><input id="pw" type="password" autocomplete="current-password" placeholder="Password" required>
+  <input id="em" name="email" type="email" autocomplete="username" placeholder="Email" required><input id="pw" name="password" type="password" autocomplete="current-password" placeholder="Password" required>
+  <label class="keep"><input type="checkbox" id="keep" checked>Keep me signed in</label>
   <button class="btn pri" id="go">Sign in</button><div class="err" id="err" role="alert"></div></form></div>
 <div id="dash" hidden><div class="wrap">
   <header><div class="brand"><img src="logo.svg" alt=""><div><b>Beitna Analytics</b><span><i class="live" id="live">Connecting…</i> · <em id="upd">Loading…</em></span></div></div>
@@ -125,8 +127,9 @@ const show=v=>{['setup','login','dash'].forEach(k=>$(k).hidden=k!==v)};
 const api=(path,opt={})=>fetch(C.url+path,{...opt,headers:{apikey:C.key,'Content-Type':'application/json',...(ses?{Authorization:'Bearer '+ses.access_token}:{}),...(opt.headers||{})}});
 async function auth(body,grant){const r=await fetch(`${C.url}/auth/v1/token?grant_type=${grant}`,{method:'POST',headers:{apikey:C.key,'Content-Type':'application/json'},body:JSON.stringify(body)});
  const j=await r.json();if(!r.ok)throw new Error(j.error_description||j.msg||'Sign-in failed');ses={access_token:j.access_token,refresh_token:j.refresh_token,exp:Date.now()+j.expires_in*1000-60000};
- try{localStorage.setItem(SK,JSON.stringify(ses))}catch(e){}return ses}
-async function fresh(){if(ses&&Date.now()>ses.exp){await auth({refresh_token:ses.refresh_token},'refresh_token');if(sb)sb.realtime.setAuth(ses.access_token)}}
+ try{(keep()?localStorage:sessionStorage).setItem(SK,JSON.stringify(ses))}catch(e){}return ses}
+const keep=()=>{try{return localStorage.getItem(SK+':keep')!=='0'}catch(e){return true}};
+async function fresh(force){if(ses&&(force||Date.now()>ses.exp)){await auth({refresh_token:ses.refresh_token},'refresh_token');if(sb)sb.realtime.setAuth(ses.access_token)}}
 async function load(){await fresh();const days=RANGES.find(r=>r[0]===range)[2],since=new Date(Date.now()-days*864e5).toISOString();
  let q=`/rest/v1/opens?select=*&at=gte.${encodeURIComponent(since)}&order=at.desc&limit=10000`;if(role!=='all')q+=`&role=eq.${role}`; // a role filter shows that role's unlocks only
  const r=await api(q);if(r.status===401){signOut();return}if(!r.ok)throw new Error('Could not load data ('+r.status+')');
@@ -174,11 +177,16 @@ function segs(){$('range').innerHTML=RANGES.map(([k,l])=>`<button data-r="${k}" 
  $('roles').innerHTML=ROLES.map(([k,l])=>`<button data-o="${k}" class="${k===role?'on':''}">${l}</button>`).join('')}
 document.addEventListener('click',e=>{const r=e.target.closest('[data-r]'),o=e.target.closest('[data-o]');if(r){range=r.dataset.r;segs();load().catch(err)}if(o){role=o.dataset.o;segs();load().catch(err)}});
 const err=e=>{$('upd').textContent=e.message};
-function signOut(){stopLive();ses=null;try{localStorage.removeItem(SK)}catch(e){}clearInterval(timer);show('login')}
+function signOut(){stopLive();ses=null;try{localStorage.removeItem(SK);sessionStorage.removeItem(SK)}catch(e){}clearInterval(timer);clearInterval(rt);show('login')}
+let rt=null; // refresh the session well before it expires so the dashboard never logs out while open
 $('out').onclick=signOut;
 $('lf').onsubmit=async e=>{e.preventDefault();$('err').textContent='';$('go').disabled=true;
- try{await auth({email:$('em').value.trim(),password:$('pw').value},'password');start()}catch(x){$('err').textContent=x.message}$('go').disabled=false};
-function start(){show('dash');segs();load().catch(err);clearInterval(timer);timer=setInterval(()=>load().catch(err),5*60000);live()}
+ try{localStorage.setItem(SK+':keep',$('keep').checked?'1':'0')}catch(_){}
+ try{await auth({email:$('em').value.trim(),password:$('pw').value},'password');
+  // offer the browser's password manager a chance to save (Chrome); Safari saves from the form fields
+  try{if(window.PasswordCredential)await navigator.credentials.store(new PasswordCredential({id:$('em').value.trim(),password:$('pw').value,name:'Beitna Analytics'}))}catch(_){}
+  start()}catch(x){$('err').textContent=x.message==='Invalid login credentials'?'Wrong email or password':x.message}$('go').disabled=false};
+function start(){show('dash');segs();load().catch(err);clearInterval(rt);rt=setInterval(()=>fresh(true).catch(()=>{}),40*60000);clearInterval(timer);timer=setInterval(()=>load().catch(err),5*60000);live()}
 // ---- real time: Supabase Realtime pushes each new row as it's inserted (RLS applies, so only the owner receives them) ----
 const days=()=>RANGES.find(r=>r[0]===range)[2];
 function live(){if(!window.supabase||chan)return;
@@ -195,7 +203,10 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 let tT;function toast(m){document.querySelector('.toast')?.remove();const d=document.createElement('div');d.className='toast';d.textContent=m;document.body.appendChild(d);clearTimeout(tT);tT=setTimeout(()=>d.remove(),3500)}
 function ping(x){if(!map||x.lat==null)return;map.panTo([+x.lat,+x.lon],{animate:true});setTimeout(()=>document.querySelectorAll('#map .leaflet-interactive').forEach(p=>{p.classList.remove('ping');void p.getBBox;p.classList.add('ping')}),50)}
 if(!C.url||!C.key){show('setup');return}
-try{ses=JSON.parse(localStorage.getItem(SK))}catch(e){}
-if(ses){fresh().then(start).catch(()=>signOut())}else show('login');
+try{ses=JSON.parse(localStorage.getItem(SK)||sessionStorage.getItem(SK))}catch(e){}
+// remembered session: refresh it and go straight to the dashboard; only a rejected refresh asks to sign in again
+if(ses){fresh(true).then(start).catch(e=>{if(/fetch|network/i.test(e.message)){start()}else signOut()})}
+else if(window.PasswordCredential&&navigator.credentials){show('login');navigator.credentials.get({password:true,mediation:'optional'}).then(c=>{if(c&&c.password){$('em').value=c.id;$('pw').value=c.password}}).catch(()=>{})}
+else show('login');
 })();
 </script></body></html>
