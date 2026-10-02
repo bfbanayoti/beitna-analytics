@@ -82,6 +82,23 @@ tr.new td{animation:newrow 2.4s ease-out}@keyframes newrow{0%{background:oklch(8
   background:var(--card);-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);box-shadow:0 12px 34px oklch(30% .04 50/.2);animation:tin .5s cubic-bezier(.32,1.4,.5,1) both;white-space:nowrap}
 @keyframes tin{from{opacity:0;transform:translate(-50%,12px) scale(.94)}}
 .leaflet-interactive.ping{animation:ping 1.2s ease-out 2}@keyframes ping{50%{stroke-width:8;stroke-opacity:.35}}
+.feed{display:flex;flex-direction:column;margin-top:8px;max-height:360px;overflow:auto}
+.ev{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;align-items:center;padding:8px 0;border-top:.5px solid var(--hairline);font-size:13.5px}.ev:first-child{border-top:0}
+.ev .who{grid-row:span 2}.ev small{color:var(--ink-2);font-size:12px;grid-column:2}.ev time{font-size:12px;color:var(--ink-3);white-space:nowrap}
+.ev.new{animation:newrow 2.4s ease-out}
+.dot{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff}.dot.admin{background:var(--clay)}.dot.guest{background:var(--sage)}.dot.none{background:var(--ink-3)}
+.devs{display:flex;flex-direction:column;margin-top:8px}
+.dv{display:grid;grid-template-columns:1fr auto;gap:3px 10px;padding:10px 0;border-top:.5px solid var(--hairline)}.dv:first-child{border-top:0}
+.dv b{font-size:15px}.dv .meta{font-size:12.5px;color:var(--ink-2);grid-column:1/-1}.dv .chips{display:flex;gap:6px;flex-wrap:wrap;grid-column:1/-1}
+.chipx{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--fill)}.chipx.admin{color:var(--clay)}.chipx.guest{color:var(--sage-ink)}
+.ren{border:0;background:none;color:var(--clay);font-weight:600;font-size:13px;cursor:pointer;padding:2px 0}
+.sess{display:flex;flex-direction:column;margin-top:8px}
+.sr{border-top:.5px solid var(--hairline)}.sr:first-child{border-top:0}
+.sr>button{all:unset;cursor:pointer;display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;align-items:center;width:100%;padding:9px 0;font-size:13.5px}
+.sr>button small{grid-column:2;color:var(--ink-2);font-size:12px}.sr>button em{font-style:normal;font-size:12px;color:var(--ink-3);text-align:end}
+.tl{margin:0 0 10px 40px;padding-inline-start:12px;border-inline-start:2px solid var(--fill-2);display:flex;flex-direction:column;gap:5px;font-size:13px}
+.tl div{display:flex;gap:10px}.tl time{color:var(--ink-3);font-size:12px;min-width:46px;font-variant-numeric:tabular-nums}.tl .k{color:var(--ink-2);font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;min-width:48px}
+.tl .err{color:var(--danger)}
 .foot{margin-top:18px;font-size:12px;color:var(--ink-3);text-align:center}
 /* sign-in / setup */
 .gate{min-height:100dvh;display:grid;place-items:center;padding:24px 18px}
@@ -112,6 +129,14 @@ ol{margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:6px
     <div class="side"><div class="card"><div class="lbl">Top cities</div><div class="rows" id="cities"></div></div><div class="card"><div class="lbl">Countries</div><div class="rows" id="countries"></div></div></div>
   </div>
   <div class="grid main">
+    <div class="card"><div class="lbl">Live activity</div><div class="feed" id="feed"></div></div>
+    <div class="card"><div class="lbl">Saved devices</div><div id="devs" class="devs"></div></div>
+  </div>
+  <div class="grid main">
+    <div class="card"><div class="lbl">Sessions <span class="muted small" id="sesn"></span></div><div id="sess" class="sess"></div></div>
+    <div class="side"><div class="card"><div class="lbl">Screens</div><div class="rows" id="screens"></div></div><div class="card"><div class="lbl">Top actions</div><div class="rows" id="actions"></div></div></div>
+  </div>
+  <div class="grid main">
     <div class="card chart"><div class="lbl">Opens over time</div><div id="chart"></div><div class="legend"><span><i style="background:var(--clay)"></i>Unlocked</span><span><i style="background:var(--fill-2)"></i>Lock screen views</span></div></div>
     <div class="side"><div class="card"><div class="lbl">Devices</div><div class="rows" id="devices"></div></div><div class="card"><div class="lbl">How they unlock</div><div class="rows" id="methods"></div></div></div>
   </div>
@@ -121,7 +146,7 @@ ol{margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:6px
 <script>
 (()=>{
 const C=window.BEITNA_ANALYTICS||{},$=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const SK='beitna-analytics:session';let ses=null,range='7d',role='all',rows=[],map=null,layer=null,timer=null,sb=null,chan=null,fresh_ids=new Set();
+const SK='beitna-analytics:session';let ses=null,range='7d',role='all',rows=[],S2=[],EV=[],NAMES={},openSess=new Set(),map=null,layer=null,timer=null,sb=null,chan=null,fresh_ids=new Set();
 const RANGES=[['24h','24 h',1],['7d','7 days',7],['30d','30 days',30],['90d','90 days',90]],ROLES=[['all','Everyone'],['admin','Admin'],['guest','Guest']];
 const show=v=>{['setup','login','dash'].forEach(k=>$(k).hidden=k!==v)};
 const api=(path,opt={})=>fetch(C.url+path,{...opt,headers:{apikey:C.key,'Content-Type':'application/json',...(ses?{Authorization:'Bearer '+ses.access_token}:{}),...(opt.headers||{})}});
@@ -133,7 +158,14 @@ async function fresh(force){if(ses&&(force||Date.now()>ses.exp)){await auth({ref
 async function load(){await fresh();const days=RANGES.find(r=>r[0]===range)[2],since=new Date(Date.now()-days*864e5).toISOString();
  let q=`/rest/v1/opens?select=*&at=gte.${encodeURIComponent(since)}&order=at.desc&limit=10000`;if(role!=='all')q+=`&role=eq.${role}`; // a role filter shows that role's unlocks only
  const r=await api(q);if(r.status===401){signOut();return}if(!r.ok)throw new Error('Could not load data ('+r.status+')');
- rows=await r.json();draw();
+ // hide the setup test rows sent while connecting Supabase (US network, 2 Oct 2026); activity.sql deletes them for good
+ rows=(await r.json()).filter(x=>!(x.browser==='Setup check'||(x.country_code==='US'&&x.at<'2026-10-03T00:00:00Z')));
+ // sessions + activity + device names (present once activity.sql has been run; quietly skipped before that)
+ const sq=`/rest/v1/sessions?select=*&started_at=gte.${encodeURIComponent(since)}&order=started_at.desc&limit=2000`+(role!=='all'?`&role=eq.${role}`:'');
+ const [a,b,c]=await Promise.all([api(sq),api(`/rest/v1/events?select=session_id,at,kind,name,detail&at=gte.${encodeURIComponent(since)}&order=at.desc&limit=20000`),api('/rest/v1/device_names?select=*')]);
+ S2=a.ok?await a.json():[];EV=b.ok?await b.json():[];NAMES=c.ok?Object.fromEntries((await c.json()).map(x=>[x.device_id,x.name])):{};
+ if(role!=='all'){const ids=new Set(S2.map(x=>x.id));EV=EV.filter(e=>ids.has(e.session_id))}
+ await autoName();draw();
  $('upd').textContent='Updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
 const fmt=n=>new Intl.NumberFormat('en-US').format(n),pct=(a,b)=>b?Math.round(a/b*100)+'%':'—';
 const place=x=>[x.city,x.country].filter(Boolean).join(', ')||'Unknown';
@@ -154,7 +186,48 @@ function draw(){const un=rows.filter(x=>x.event==='unlock'),vw=rows.filter(x=>x.
  list('methods',count(un,x=>({password:'Password',faceid:'Face ID',remembered:'Remembered device'})[x.method]).slice(0,4));
  $('recent').innerHTML=rows.slice(0,60).map(x=>`<tr class="${fresh_ids.has(x.id)?'new':''}"><td>${new Date(x.at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
   <td>${x.event==='unlock'?`<span class="tag ${x.role}">${x.role==='admin'?'Admin':'Guest'}</span>`:'<span class="tag view">Lock screen</span>'}</td><td>${esc(place(x))}</td><td>${esc([x.device,x.os].filter(Boolean).join(' '))}</td><td>${esc(x.browser||'')}</td><td>${x.standalone?'Home Screen':'Browser'}</td></tr>`).join('')||`<tr><td colspan="6" class="muted">No opens in this period.</td></tr>`;
- chart();mapDraw()}
+ chart();mapDraw();drawActivity()}
+// ---- activity: labels, live feed, saved devices, sessions ----
+const ACT={route:'Changed tab',add:'Started an expense',addincome:'Started income',quick:'Opened + menu',savetx:'Saved an expense',savetxedit:'Edited a transaction',tx:'Opened a transaction',
+ import:'Opened statement import',impgo:'Imported a statement',impfile:'Chose a statement file',paybill:'Opened bill payment',savepaybill:'Marked a bill paid',settle:'Opened settle up',savesettle:'Recorded a settlement',
+ contribute:'Opened goal transfer',savecontrib:'Paid into a goal',goal:'Opened a goal',newgoal:'New goal',savenewgoal:'Created a goal',newbill:'New bill',savenewbill:'Added a bill',newacc:'New account',savenewacc:'Added an account',
+ paycard:'Opened card payment',savepaycard:'Paid a credit card',review:'Opened monthly review',savereview:'Confirmed monthly review',activity:'Opened all activity',partnerview:'Opened partner view',focuscat:'Tapped a category',
+ lang:'Switched language',numerals:'Switched numerals',swapme:'Switched partner',set:'Changed a setting',lock:'Locked the app',faceidon:'Turned on Face ID',faceidoff:'Turned off Face ID',backup:'Downloaded a backup',ics:'Added bills to Calendar',
+ profile:'Opened profile',saveprofile:'Saved profile',proof:'Viewed a proof',ask:'Asked to confirm',do:'Confirmed',close:'Closed a sheet',bgclose:'Closed a sheet',more:'Showed more',plan:'Changed plan',barinfo:'Tapped the chart',
+ wdemo:'Opened demo data',wsetup:'Started setup',wcreate:'Created a household',startover:'Started over',reset:'Loaded demo data',separate:'Separate account',linkbank:'Link a bank'};
+const PAGE={home:'Home',goals:'Goals',accounts:'Accounts',insights:'Insights',me:'Profile'};
+const SHEET={add:'Add expense',quick:'+ menu',import:'Statement import',settle:'Settle up',paybill:'Bill payment',contribute:'Goal transfer',paycard:'Card payment',tx:'Transaction',activity:'All activity',review:'Monthly review',goal:'Goal',newgoal:'New goal',newbill:'New bill',newacc:'New account',profile:'Profile',proof:'Proof',confirm:'Confirm',info:'Info'};
+const evLabel=e=>e.kind==='page'?'Opened '+(PAGE[e.name]||e.name):e.kind==='sheet'?'Opened '+(SHEET[e.name]||e.name):e.kind==='error'?'Error: '+e.name:(ACT[e.name]||e.name)+(e.detail&&['route','set','focuscat'].includes(e.name)?' · '+(PAGE[e.detail]||e.detail):'');
+const devKey=x=>x.device_id||('anon:'+x.id);
+const devName=d=>NAMES[d.id]||[d.device,d.os,d.browser].filter(Boolean).join(' · ')||'Unknown device';
+const initial=r=>r==='admin'?'A':r==='guest'?'G':'?';
+function devices(){const m=new Map();S2.forEach(x=>{if(!x.device_id)return;const d=m.get(x.device_id)||{id:x.device_id,device:x.device,os:x.os,browser:x.browser,first:x.started_at,last:x.started_at,city:place(x),n:0,roles:new Set(),faceid:false,remembered:false};
+ d.n++;if(x.role)d.roles.add(x.role);if(x.started_at<d.first)d.first=x.started_at;if(x.started_at>=d.last){d.last=x.started_at;d.city=place(x);d.os=x.os||d.os;d.faceid=!!x.faceid;d.remembered=!!x.remembered}m.set(x.device_id,d)});return[...m.values()].sort((a,b)=>a.last<b.last?1:-1)}
+// the owner asked for the admin iPhone to be called "BB iPhone": name the most recent unnamed admin iPhone once
+async function autoName(){try{if(localStorage.getItem('beitna-analytics:bb'))return}catch(e){}
+ const d=devices().find(d=>d.device==='iPhone'&&d.roles.has('admin'));if(!d)return;
+ if(!NAMES[d.id]&&!Object.values(NAMES).includes('BB iPhone')){const r=await api('/rest/v1/device_names',{method:'POST',headers:{Prefer:'resolution=merge-duplicates'},body:JSON.stringify({device_id:d.id,name:'BB iPhone'})});if(r.ok)NAMES[d.id]='BB iPhone'}
+ try{localStorage.setItem('beitna-analytics:bb','1')}catch(e){}}
+async function rename(id){const cur=NAMES[id]||'';const n=prompt('Name this device',cur);if(n==null)return;const name=n.trim().slice(0,40);
+ const r=name?await api('/rest/v1/device_names',{method:'POST',headers:{Prefer:'resolution=merge-duplicates'},body:JSON.stringify({device_id:id,name})}):await api('/rest/v1/device_names?device_id=eq.'+encodeURIComponent(id),{method:'DELETE'});
+ if(r.ok){if(name)NAMES[id]=name;else delete NAMES[id];drawActivity()}else alert('Could not save the name ('+r.status+')')}
+function drawActivity(){const byS=new Map(S2.map(x=>[x.id,x]));
+ $('feed').innerHTML=EV.slice(0,40).map(e=>{const x=byS.get(e.session_id)||{};const d=x.device_id?devName({id:x.device_id,device:x.device,os:x.os,browser:x.browser}):(x.device||'');
+  return `<div class="ev ${fresh_ids.has('e'+e.at+e.name)?'new':''}"><span class="dot who ${x.role||'none'}">${initial(x.role)}</span><span>${esc(evLabel(e))}</span><time>${ago(e.at)}</time><small>${esc([x.role==='admin'?'Admin':x.role==='guest'?'Guest':'',x.city,d].filter(Boolean).join(' · '))}</small></div>`}).join('')||'<div class="muted small" style="padding:8px 0">No activity yet. It appears here as people use the app.</div>';
+ const dv=devices();$('devs').innerHTML=dv.map(d=>{const admin=d.roles.has('admin');return `<div class="dv"><b>${esc(admin?devName(d):[d.device,d.os,d.browser].filter(Boolean).join(' · '))}</b>${admin?`<button class="ren" data-ren="${esc(d.id)}">${NAMES[d.id]?'Rename':'Name'}</button>`:'<span></span>'}
+  <div class="chips">${[...d.roles].map(r=>`<span class="chipx ${r}">${r==='admin'?'Admin':'Guest'}</span>`).join('')}${d.faceid?'<span class="chipx">Face ID</span>':''}${d.remembered?'<span class="chipx">Remembered</span>':''}</div>
+  <div class="meta">${admin&&NAMES[d.id]?esc([d.device,d.os,d.browser].filter(Boolean).join(' · '))+' · ':''}${d.n} session${d.n>1?'s':''} · last ${ago(d.last)}${d.city&&d.city!=='Unknown'?' in '+esc(d.city):''} · first seen ${new Date(d.first).toLocaleDateString([],{month:'short',day:'numeric'})}</div></div>`}).join('')||'<div class="muted small" style="padding:8px 0">Devices appear after they open Beitna.</div>';
+ const evBy=new Map();EV.forEach(e=>{(evBy.get(e.session_id)||evBy.set(e.session_id,[]).get(e.session_id)).push(e)});
+ $('sesn').textContent=S2.length?`· ${S2.length} in this period · avg ${avgLen()}`:'';
+ $('sess').innerHTML=S2.slice(0,40).map(x=>{const ev=(evBy.get(x.id)||[]).slice().reverse(),mins=Math.max(0,Math.round((new Date(x.last_at)-new Date(x.started_at))/60000)),o=openSess.has(x.id);
+  const dname=x.device_id&&x.role==='admin'&&NAMES[x.device_id]?NAMES[x.device_id]:[x.device,x.os].filter(Boolean).join(' ');
+  return `<div class="sr"><button data-ses="${x.id}"><span class="dot ${x.role||'none'}">${initial(x.role)}</span><span>${esc(place(x))} · ${esc(dname)}</span><em>${new Date(x.started_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</em>
+   <small>${x.role==='admin'?'Admin':x.role==='guest'?'Guest':'Unknown'} · ${({password:'password',faceid:'Face ID',remembered:'remembered device'})[x.method]||''} · ${mins} min · ${x.events} step${x.events===1?'':'s'}${x.standalone?' · Home Screen':''}</small><em>${o?'Hide':'Timeline'}</em></button>
+   ${o?`<div class="tl">${ev.map(e=>`<div><time>${new Date(e.at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</time><span class="k">${e.kind}</span><span class="${e.kind==='error'?'err':''}">${esc(evLabel(e))}</span></div>`).join('')||'<span class="muted">No steps recorded.</span>'}</div>`:''}</div>`}).join('')||'<div class="muted small" style="padding:8px 0">Sessions appear after someone unlocks Beitna.</div>';
+ list('screens',count(EV.filter(e=>e.kind==='page'),e=>PAGE[e.name]||e.name).slice(0,6));
+ list('actions',count(EV.filter(e=>e.kind==='action'&&!['close','bgclose','ask','route'].includes(e.name)),e=>ACT[e.name]||e.name).slice(0,8))}
+function avgLen(){const l=S2.map(x=>(new Date(x.last_at)-new Date(x.started_at))/60000);const a=l.reduce((s,x)=>s+x,0)/(l.length||1);return a<1?'under a minute':Math.round(a)+' min'}
+document.addEventListener('click',e=>{const s=e.target.closest('[data-ses]'),r=e.target.closest('[data-ren]');if(s){const id=s.dataset.ses;openSess.has(id)?openSess.delete(id):openSess.add(id);drawActivity()}if(r)rename(r.dataset.ren)});
 function ago(t){const s=(Date.now()-new Date(t))/1000;return s<90?'just now':s<3600?Math.round(s/60)+' min ago':s<86400?Math.round(s/3600)+' h ago':Math.round(s/86400)+' d ago'}
 function chart(){const days=RANGES.find(r=>r[0]===range)[2],hourly=days===1,n=hourly?24:days,step=hourly?36e5:864e5;
  // buckets: the last 24 hours by hour, or calendar days ending today
@@ -196,6 +269,9 @@ function live(){if(!window.supabase||chan)return;
    rows.unshift(x);fresh_ids.add(x.id);setTimeout(()=>fresh_ids.delete(x.id),3000);draw();ping(x);
    toast(x.event==='unlock'?`${x.role==='admin'?'Admin':'Guest'} opened Beitna${x.city?' in '+x.city:''}`:`Lock screen opened${x.city?' in '+x.city:''}`);
    $('upd').textContent='Updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})})
+ .on('postgres_changes',{event:'*',schema:'public',table:'sessions'},({new:x})=>{if(!x||!x.id)return;if(role!=='all'&&x.role&&x.role!==role)return;const i=S2.findIndex(s=>s.id===x.id);if(i>=0)S2[i]={...S2[i],...x};else S2.unshift(x);autoName().then(drawActivity)})
+ .on('postgres_changes',{event:'INSERT',schema:'public',table:'events'},({new:e})=>{if(!e)return;const x=S2.find(s=>s.id===e.session_id);if(role!=='all'&&x&&x.role!==role)return;
+   EV.unshift(e);const k='e'+e.at+e.name;fresh_ids.add(k);setTimeout(()=>fresh_ids.delete(k),3000);drawActivity()})
  .subscribe(st=>{const el=$('live');el.classList.toggle('on',st==='SUBSCRIBED');el.textContent=st==='SUBSCRIBED'?'Live':st==='CHANNEL_ERROR'||st==='TIMED_OUT'?'Reconnecting…':'Connecting…';
    if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'){stopLive();setTimeout(()=>{if(ses)fresh().then(live).catch(()=>{})},4000)}})}
 function stopLive(){if(chan&&sb)sb.removeChannel(chan);chan=null}
