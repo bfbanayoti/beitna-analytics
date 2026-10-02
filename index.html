@@ -203,11 +203,15 @@ const devName=d=>NAMES[d.id]||[d.device,d.os,d.browser].filter(Boolean).join(' Â
 const initial=r=>r==='admin'?'A':r==='guest'?'G':'?';
 function devices(){const m=new Map();S2.forEach(x=>{if(!x.device_id)return;const d=m.get(x.device_id)||{id:x.device_id,device:x.device,os:x.os,browser:x.browser,first:x.started_at,last:x.started_at,city:place(x),n:0,roles:new Set(),faceid:false,remembered:false};
  d.n++;if(x.role)d.roles.add(x.role);if(x.started_at<d.first)d.first=x.started_at;if(x.started_at>=d.last){d.last=x.started_at;d.city=place(x);d.os=x.os||d.os;d.faceid=!!x.faceid;d.remembered=!!x.remembered}m.set(x.device_id,d)});return[...m.values()].sort((a,b)=>a.last<b.last?1:-1)}
-// the owner asked for the admin iPhone to be called "BB iPhone": name the most recent unnamed admin iPhone once
-async function autoName(){try{if(localStorage.getItem('beitna-analytics:bb'))return}catch(e){}
- const d=devices().find(d=>d.device==='iPhone'&&d.roles.has('admin'));if(!d)return;
- if(!NAMES[d.id]&&!Object.values(NAMES).includes('BB iPhone')){const r=await api('/rest/v1/device_names',{method:'POST',headers:{Prefer:'resolution=merge-duplicates'},body:JSON.stringify({device_id:d.id,name:'BB iPhone'})});if(r.ok)NAMES[d.id]='BB iPhone'}
- try{localStorage.setItem('beitna-analytics:bb','1')}catch(e){}}
+// "BB iPhone" is the owner's admin iPhone: keep that name on an admin iPhone only. If it sits on any other device
+// (e.g. the Mac), take it off; give it to the most recently used admin iPhone if no iPhone has it. Checked on every load.
+const saveName=(id,name)=>api('/rest/v1/device_names',{method:'POST',headers:{Prefer:'resolution=merge-duplicates'},body:JSON.stringify({device_id:id,name})});
+const dropName=id=>api('/rest/v1/device_names?device_id=eq.'+encodeURIComponent(id),{method:'DELETE'});
+async function autoName(){const BB='BB iPhone',dv=devices(),kind=new Map(dv.map(d=>[d.id,d]));
+ for(const[id,n]of Object.entries(NAMES)){const d=kind.get(id);if(n===BB&&d&&!(d.device==='iPhone'&&d.roles.has('admin'))){if((await dropName(id)).ok)delete NAMES[id]}}
+ if(Object.values(NAMES).includes(BB))return;
+ const phone=dv.find(d=>d.device==='iPhone'&&d.roles.has('admin')&&!NAMES[d.id]);
+ if(phone&&(await saveName(phone.id,BB)).ok)NAMES[phone.id]=BB}
 async function rename(id){const cur=NAMES[id]||'';const n=prompt('Name this device',cur);if(n==null)return;const name=n.trim().slice(0,40);
  const r=name?await api('/rest/v1/device_names',{method:'POST',headers:{Prefer:'resolution=merge-duplicates'},body:JSON.stringify({device_id:id,name})}):await api('/rest/v1/device_names?device_id=eq.'+encodeURIComponent(id),{method:'DELETE'});
  if(r.ok){if(name)NAMES[id]=name;else delete NAMES[id];drawActivity()}else alert('Could not save the name ('+r.status+')')}
