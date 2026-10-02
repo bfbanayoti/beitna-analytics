@@ -4,15 +4,6 @@ A private dashboard showing who opens [Beitna](https://bfbanayoti.github.io/Beit
 
 It is a separate site. The Beitna lock screen sends one event when it is shown (`view`) and one when it is unlocked (`unlock`). Supabase turns the visitor's network address into an approximate city inside `log_open()`; **IP addresses are never stored**, and coordinates are rounded to about 10 km.
 
-## Password
-
-The site itself is encrypted: `index.html` is a lock screen plus the dashboard as AES-256-GCM ciphertext, opened with the site password (kept locally in `.password`, never committed). After that, the dashboard asks once for the owner's Supabase login.
-
-```bash
-../Beitna/.venv/bin/python build.py          # dashboard.html -> index.html
-../Beitna/.venv/bin/python build.py unpack   # restore dashboard.html with the password
-```
-
 ## Setup (once)
 
 1. Create a Supabase project (region: Frankfurt, closest to Jordan).
@@ -26,8 +17,6 @@ Both values are public by design: the anon key can only call `log_open()` and ca
 
 | File | Purpose |
 |------|---------|
-| `index.html` | Built, encrypted page (lock screen + dashboard ciphertext) |
-| `dashboard.html` | Dashboard source, local only (owner sign-in, map, opens over time, places, devices, recent opens) |
-| `login.html`, `build.py` | Lock screen and the encryption build |
+| `index.html` | The dashboard (owner sign-in, live map, opens over time, places, devices, recent opens) |
 | `config.js` | Supabase project URL + anon key |
 | `supabase/setup.sql` | Table, logging function, security policies |
