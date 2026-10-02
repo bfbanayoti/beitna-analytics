@@ -99,6 +99,21 @@ tr.new td{animation:newrow 2.4s ease-out}@keyframes newrow{0%{background:oklch(8
 .tl{margin:0 0 10px 40px;padding-inline-start:12px;border-inline-start:2px solid var(--fill-2);display:flex;flex-direction:column;gap:5px;font-size:13px}
 .tl div{display:flex;gap:10px}.tl time{color:var(--ink-3);font-size:12px;min-width:46px;font-variant-numeric:tabular-nums}.tl .k{color:var(--ink-2);font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;min-width:48px}
 .tl .err{color:var(--danger)}
+.att{margin-top:14px}.sts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-top:10px}
+.st{padding:12px 14px;border-radius:16px;background:var(--fill)}.st .v{font-family:var(--display);font-size:26px;font-weight:300;letter-spacing:-.02em;font-variant-numeric:tabular-nums}.st .v small{font-size:12px;color:var(--ink-2);font-weight:500;letter-spacing:0}
+.st .s{font-size:12px;color:var(--ink-2)}.st.ok .v{color:var(--sage-ink)}.st.bad .v{color:var(--danger)}
+.flist{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:12px;color:var(--ink-2)}.flist span::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--danger);margin-inline-end:6px;vertical-align:1px}
+.dv{cursor:pointer;border-radius:12px;padding-inline:6px;margin-inline:-6px;transition:background .2s}.dv:hover{background:var(--fill)}.dv .go{font-size:12.5px;color:var(--clay);font-weight:600}
+.chipx.bad{color:var(--danger)}.dot.bad{background:var(--danger)}
+.mine{margin-top:10px;padding-top:10px;border-top:.5px solid var(--hairline);display:flex;flex-wrap:wrap;align-items:center;gap:6px}.ren.sm{color:var(--ink-3)}
+.ovl{position:fixed;inset:0;z-index:2000;background:oklch(20% .02 50/.35);display:flex;justify-content:flex-end;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+.panel{width:min(560px,100%);height:100%;background:var(--bg);box-shadow:-20px 0 60px oklch(20% .03 50/.25);display:flex;flex-direction:column;animation:slide .35s cubic-bezier(.2,.8,.2,1)}
+@keyframes slide{from{transform:translateX(40px);opacity:.4}}
+.ph{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:calc(env(safe-area-inset-top,0px) + 18px) 20px 14px;border-bottom:.5px solid var(--hairline)}.ph h2{margin:2px 0 4px;font-size:22px}
+.pbody{overflow:auto;padding:14px 20px 40px;display:flex;flex-direction:column;gap:14px}
+.psess{background:var(--card);border:.5px solid var(--hairline);border-radius:18px;padding:12px 14px}.psess.fail{background:oklch(58% .2 25/.06)}.psh{display:flex;gap:10px;align-items:center;margin-bottom:6px}
+.psess .tl{margin:0 0 0 40px}
+@media (max-width:900px){.sts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .foot{margin-top:18px;font-size:12px;color:var(--ink-3);text-align:center}
 /* sign-in / setup */
 .gate{min-height:100dvh;display:grid;place-items:center;padding:24px 18px}
@@ -124,13 +139,14 @@ ol{margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:6px
   <header><div class="brand"><img src="logo.svg" alt=""><div><b>Beitna Analytics</b><span><i class="live" id="live">Connecting…</i> · <em id="upd">Loading…</em></span></div></div>
    <div class="ctrls"><div class="seg" id="range"></div><div class="seg" id="roles"></div><button class="btn" id="out">Sign out</button></div></header>
   <div class="grid kpis" id="kpis"></div>
+  <div class="card att" id="att"></div>
   <div class="grid main">
     <div class="card"><div class="lbl">Where Beitna is opened</div><div id="map"></div><div class="legend"><span><i style="background:var(--clay)"></i>Admin</span><span><i style="background:var(--sage)"></i>Guest</span><span><i style="background:var(--ink-3)"></i>Lock screen only</span></div></div>
     <div class="side"><div class="card"><div class="lbl">Top cities</div><div class="rows" id="cities"></div></div><div class="card"><div class="lbl">Countries</div><div class="rows" id="countries"></div></div></div>
   </div>
   <div class="grid main">
     <div class="card"><div class="lbl">Live activity</div><div class="feed" id="feed"></div></div>
-    <div class="card"><div class="lbl">Saved devices</div><div id="devs" class="devs"></div></div>
+    <div class="card"><div class="lbl">Guests <span class="muted small">· tap one to see everything they did</span></div><div id="devs" class="devs"></div><div id="mine" class="mine"></div></div>
   </div>
   <div class="grid main">
     <div class="card"><div class="lbl">Sessions <span class="muted small" id="sesn"></span></div><div id="sess" class="sess"></div></div>
@@ -156,7 +172,7 @@ async function auth(body,grant){const r=await fetch(`${C.url}/auth/v1/token?gran
 const keep=()=>{try{return localStorage.getItem(SK+':keep')!=='0'}catch(e){return true}};
 async function fresh(force){if(ses&&(force||Date.now()>ses.exp)){await auth({refresh_token:ses.refresh_token},'refresh_token');if(sb)sb.realtime.setAuth(ses.access_token)}}
 async function load(){await fresh();const days=RANGES.find(r=>r[0]===range)[2],since=new Date(Date.now()-days*864e5).toISOString();
- let q=`/rest/v1/opens?select=*&at=gte.${encodeURIComponent(since)}&order=at.desc&limit=10000`;if(role!=='all')q+=`&role=eq.${role}`; // a role filter shows that role's unlocks only
+ let q=`/rest/v1/opens?select=*&at=gte.${encodeURIComponent(since)}&order=at.desc&limit=10000`;if(role!=='all')q+=`&or=(role.eq.${role},event.eq.fail)`; // a role filter shows that role's unlocks, plus wrong-password tries (role unknown)
  const r=await api(q);if(r.status===401){signOut();return}if(!r.ok)throw new Error('Could not load data ('+r.status+')');
  // hide the setup test rows sent while connecting Supabase (US network, 2 Oct 2026); activity.sql deletes them for good
  rows=(await r.json()).filter(x=>!(x.browser==='Setup check'||(x.country_code==='US'&&x.at<'2026-10-03T00:00:00Z')));
@@ -186,7 +202,7 @@ function draw(){const un=rows.filter(x=>x.event==='unlock'),vw=rows.filter(x=>x.
  list('methods',count(un,x=>({password:'Password',faceid:'Face ID',remembered:'Remembered device'})[x.method]).slice(0,4));
  $('recent').innerHTML=rows.slice(0,60).map(x=>`<tr class="${fresh_ids.has(x.id)?'new':''}"><td>${new Date(x.at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
   <td>${x.event==='unlock'?`<span class="tag ${x.role}">${x.role==='admin'?'Admin':'Guest'}</span>`:'<span class="tag view">Lock screen</span>'}</td><td>${esc(place(x))}</td><td>${esc([x.device,x.os].filter(Boolean).join(' '))}</td><td>${esc(x.browser||'')}</td><td>${x.standalone?'Home Screen':'Browser'}</td></tr>`).join('')||`<tr><td colspan="6" class="muted">No opens in this period.</td></tr>`;
- chart();mapDraw();drawActivity()}
+ chart();mapDraw();drawActivity();drawAttempts()}
 // ---- activity: labels, live feed, saved devices, sessions ----
 const ACT={route:'Changed tab',add:'Started an expense',addincome:'Started income',quick:'Opened + menu',savetx:'Saved an expense',savetxedit:'Edited a transaction',tx:'Opened a transaction',
  import:'Opened statement import',impgo:'Imported a statement',impfile:'Chose a statement file',paybill:'Opened bill payment',savepaybill:'Marked a bill paid',settle:'Opened settle up',savesettle:'Recorded a settlement',
@@ -218,9 +234,17 @@ async function rename(id){const cur=NAMES[id]||'';const n=prompt('Name this devi
 function drawActivity(){const byS=new Map(S2.map(x=>[x.id,x]));
  $('feed').innerHTML=EV.slice(0,40).map(e=>{const x=byS.get(e.session_id)||{};const d=x.device_id?devName({id:x.device_id,device:x.device,os:x.os,browser:x.browser}):(x.device||'');
   return `<div class="ev ${fresh_ids.has('e'+e.at+e.name)?'new':''}"><span class="dot who ${x.role||'none'}">${initial(x.role)}</span><span>${esc(evLabel(e))}</span><time>${ago(e.at)}</time><small>${esc([x.role==='admin'?'Admin':x.role==='guest'?'Guest':'',x.city,d].filter(Boolean).join(' · '))}</small></div>`}).join('')||'<div class="muted small" style="padding:8px 0">No activity yet. It appears here as people use the app.</div>';
- const dv=devices();$('devs').innerHTML=dv.map(d=>{const admin=d.roles.has('admin');return `<div class="dv"><b>${esc(admin?devName(d):[d.device,d.os,d.browser].filter(Boolean).join(' · '))}</b>${admin?`<button class="ren" data-ren="${esc(d.id)}">${NAMES[d.id]?'Rename':'Name'}</button>`:'<span></span>'}
-  <div class="chips">${[...d.roles].map(r=>`<span class="chipx ${r}">${r==='admin'?'Admin':'Guest'}</span>`).join('')}${d.faceid?'<span class="chipx">Face ID</span>':''}${d.remembered?'<span class="chipx">Remembered</span>':''}</div>
-  <div class="meta">${admin&&NAMES[d.id]?esc([d.device,d.os,d.browser].filter(Boolean).join(' · '))+' · ':''}${d.n} session${d.n>1?'s':''} · last ${ago(d.last)}${d.city&&d.city!=='Unknown'?' in '+esc(d.city):''} · first seen ${new Date(d.first).toLocaleDateString([],{month:'short',day:'numeric'})}</div></div>`}).join('')||'<div class="muted small" style="padding:8px 0">Devices appear after they open Beitna.</div>';
+ // guests = devices that used the guest password, or only ever got it wrong. Each device is one person.
+ const dv=devices(),gd=dv.filter(d=>!d.roles.has('admin')),seen=new Set(dv.map(d=>d.id)),fl=rows.filter(x=>x.event==='fail'&&x.device_id);
+ const failOnly=new Map();fl.forEach(x=>{if(seen.has(x.device_id))return;const f=failOnly.get(x.device_id)||{id:x.device_id,device:x.device,os:x.os,browser:x.browser,first:x.at,last:x.at,city:place(x),n:0,roles:new Set(),fails:0,never:true};f.fails++;if(x.at<f.first)f.first=x.at;if(x.at>f.last){f.last=x.at;f.city=place(x)}failOnly.set(x.device_id,f)});
+ const fails=id=>fl.filter(x=>x.device_id===id).length,steps=id=>EV.filter(e=>S2.some(s=>s.id===e.session_id&&s.device_id===id)).length;
+ const guests=[...gd.map(d=>({...d,fails:fails(d.id)})),...failOnly.values()].sort((a,b)=>a.last<b.last?1:-1);
+ $('devs').innerHTML=guests.map((d,i)=>`<div class="dv" data-dev="${esc(d.id)}"><b>Guest ${guests.length-i} · ${esc([d.device,d.os].filter(Boolean).join(' '))}</b><span class="go">History ›</span>
+  <div class="chips">${d.never?'<span class="chipx bad">Never got in</span>':`<span class="chipx guest">${d.n} unlock${d.n===1?'':'s'}</span>`}${d.fails?`<span class="chipx bad">${d.fails} wrong password${d.fails===1?'':'s'}</span>`:''}${d.never?'':`<span class="chipx">${steps(d.id)} steps</span>`}</div>
+  <div class="meta">${d.city&&d.city!=='Unknown'?esc(d.city)+' · ':''}last ${ago(d.last)} · first seen ${new Date(d.first).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}${d.browser?' · '+esc(d.browser):''}</div></div>`).join('')
+  ||'<div class="muted small" style="padding:8px 0">No guests yet. They appear here after they try the guest link.</div>';
+ const mine=dv.filter(d=>d.roles.has('admin'));
+ $('mine').innerHTML=mine.length?`<span class="muted small">Your devices:</span> ${mine.map(d=>`<button class="ren" data-dev="${esc(d.id)}">${esc(devName(d))}</button><button class="ren sm" data-ren="${esc(d.id)}" title="Rename">✎</button>`).join(' ')}`:'';
  const evBy=new Map();EV.forEach(e=>{(evBy.get(e.session_id)||evBy.set(e.session_id,[]).get(e.session_id)).push(e)});
  $('sesn').textContent=S2.length?`· ${S2.length} in this period · avg ${avgLen()}`:'';
  $('sess').innerHTML=S2.slice(0,40).map(x=>{const ev=(evBy.get(x.id)||[]).slice().reverse(),mins=Math.max(0,Math.round((new Date(x.last_at)-new Date(x.started_at))/60000)),o=openSess.has(x.id);
@@ -230,8 +254,44 @@ function drawActivity(){const byS=new Map(S2.map(x=>[x.id,x]));
    ${o?`<div class="tl">${ev.map(e=>`<div><time>${new Date(e.at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</time><span class="k">${e.kind}</span><span class="${e.kind==='error'?'err':''}">${esc(evLabel(e))}</span></div>`).join('')||'<span class="muted">No steps recorded.</span>'}</div>`:''}</div>`}).join('')||'<div class="muted small" style="padding:8px 0">Sessions appear after someone unlocks Beitna.</div>';
  list('screens',count(EV.filter(e=>e.kind==='page'),e=>PAGE[e.name]||e.name).slice(0,6));
  list('actions',count(EV.filter(e=>e.kind==='action'&&!['close','bgclose','ask','route'].includes(e.name)),e=>ACT[e.name]||e.name).slice(0,8))}
+// wrong passwords vs unlocks. 'People' = distinct devices (device id when known, else device+browser+city).
+function drawAttempts(){const who=x=>x.device_id||[x.device,x.os,x.browser,x.city].join('|');
+ const un=rows.filter(x=>x.event==='unlock'),fl=rows.filter(x=>x.event==='fail'),g=un.filter(x=>x.role==='guest'),a=un.filter(x=>x.role==='admin');
+ const ppl=arr=>new Set(arr.map(who)).size,fp=new Set(fl.map(who)),up=new Set(un.map(who)),never=[...fp].filter(k=>!up.has(k)).length;
+ const P=n=>fmt(n)+` <small>${n===1?'person':'people'}</small>`;
+ const stat=(l,v,sub,cls='')=>`<div class="st ${cls}"><div class="lbl">${l}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
+ $('att').innerHTML=`<div class="lbl">Guest access</div><div class="sts">
+  ${stat('Guests unlocked',P(ppl(g)),`${fmt(g.length)} unlock${g.length===1?'':'s'}`,'ok')}
+  ${stat('Wrong password',P(fp.size),`${fmt(fl.length)} attempt${fl.length===1?'':'s'}`,fl.length?'bad':'')}
+  ${stat('Never got in',P(never),'tried, never unlocked',never?'bad':'')}
+  ${stat('Success rate',un.length+fl.length?Math.round(un.length/(un.length+fl.length)*100)+'%':'—','of password attempts')}
+  ${stat('Admin unlocks',fmt(a.length),'you, for reference')}</div>
+  ${fl.length?`<div class="flist">${fl.slice(0,8).map(x=>`<span>${new Date(x.at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})} · ${esc(place(x))} · ${esc([x.device,x.os].filter(Boolean).join(' '))}</span>`).join('')}</div>`:''}`}
 function avgLen(){const l=S2.map(x=>(new Date(x.last_at)-new Date(x.started_at))/60000);const a=l.reduce((s,x)=>s+x,0)/(l.length||1);return a<1?'under a minute':Math.round(a)+' min'}
-document.addEventListener('click',e=>{const s=e.target.closest('[data-ses]'),r=e.target.closest('[data-ren]');if(s){const id=s.dataset.ses;openSess.has(id)?openSess.delete(id):openSess.add(id);drawActivity()}if(r)rename(r.dataset.ren)});
+document.addEventListener('click',e=>{const s=e.target.closest('[data-ses]'),r=e.target.closest('[data-ren]'),dv=e.target.closest('[data-dev]'),x=e.target.closest('[data-x]');
+ if(r){rename(r.dataset.ren);return}if(x||e.target.id==='ovl'){closeDev();return}if(s){const id=s.dataset.ses;openSess.has(id)?openSess.delete(id):openSess.add(id);drawActivity();if(devOpen)showDev(devOpen);return}if(dv)showDev(dv.dataset.dev)});
+// one device's full history: every session, and in each one every screen, sheet and action with its time; wrong passwords too
+let devOpen=null;
+function showDev(id){devOpen=id;const d=devices().find(x=>x.id===id);const ss=S2.filter(x=>x.device_id===id),fl=rows.filter(x=>x.event==='fail'&&x.device_id===id);
+ const any=d||(fl[0]&&{device:fl[0].device,os:fl[0].os,browser:fl[0].browser,roles:new Set(),first:fl[fl.length-1].at});if(!any)return;
+ const evBy=new Map();EV.forEach(e=>{(evBy.get(e.session_id)||evBy.set(e.session_id,[]).get(e.session_id)).push(e)});
+ const steps=ss.reduce((n,x)=>n+(evBy.get(x.id)||[]).length,0),admin=any.roles.has('admin');
+ const title=admin?devName(any):'Guest · '+[any.device,any.os].filter(Boolean).join(' ');
+ // one timeline: sessions (with their steps) and wrong-password attempts, newest first
+ const items=[...ss.map(x=>({t:x.started_at,s:x})),...fl.map(x=>({t:x.at,f:x}))].sort((a,b)=>a.t<b.t?1:-1);
+ let o=$('ovl');if(!o){o=document.createElement('div');o.id='ovl';o.className='ovl';document.body.appendChild(o)}
+ o.innerHTML=`<div class="panel" role="dialog" aria-modal="true"><div class="ph"><div><div class="lbl">${admin?'Your device':'Guest'}</div><h2>${esc(title)}</h2>
+  <div class="muted small">${esc([any.device,any.os,any.browser].filter(Boolean).join(' · '))}${any.faceid?' · Face ID':''}${any.remembered?' · Remembered':''}</div>
+  <div class="muted small">${ss.length} session${ss.length===1?'':'s'} · ${steps} step${steps===1?'':'s'}${fl.length?` · ${fl.length} wrong password${fl.length===1?'':'s'}`:''} · first seen ${new Date(any.first).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div></div>
+  <button class="btn" data-x>Close</button></div>
+  <div class="pbody">${items.map(it=>{if(it.f)return `<div class="psess fail"><div class="psh"><span class="dot bad">✕</span><div><b>${new Date(it.t).toLocaleString([],{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'})}</b><div class="muted small">Wrong password · ${esc(place(it.f))}</div></div></div></div>`;
+   const x=it.s,ev=(evBy.get(x.id)||[]).slice().reverse(),mins=Math.max(0,Math.round((new Date(x.last_at)-new Date(x.started_at))/60000));
+   return `<div class="psess"><div class="psh"><span class="dot ${x.role||'none'}">${initial(x.role)}</span><div><b>${new Date(x.started_at).toLocaleString([],{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</b>
+    <div class="muted small">Unlocked as ${x.role==='admin'?'Admin':x.role==='guest'?'Guest':'—'} · ${({password:'password',faceid:'Face ID',remembered:'remembered device'})[x.method]||''} · ${esc(place(x))} · ${mins} min${x.standalone?' · Home Screen':''}</div></div></div>
+    <div class="tl">${ev.map(e=>`<div><time>${new Date(e.at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</time><span class="k">${e.kind}</span><span class="${e.kind==='error'?'err':''}">${esc(evLabel(e))}</span></div>`).join('')||'<span class="muted">No steps recorded.</span>'}</div></div>`}).join('')||'<div class="muted">Nothing in this period.</div>'}</div></div>`;
+ o.hidden=false;document.body.style.overflow='hidden'}
+function closeDev(){devOpen=null;const o=$('ovl');if(o){o.hidden=true;o.innerHTML=''}document.body.style.overflow=''}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDev()});
 function ago(t){const s=(Date.now()-new Date(t))/1000;return s<90?'just now':s<3600?Math.round(s/60)+' min ago':s<86400?Math.round(s/3600)+' h ago':Math.round(s/86400)+' d ago'}
 function chart(){const days=RANGES.find(r=>r[0]===range)[2],hourly=days===1,n=hourly?24:days,step=hourly?36e5:864e5;
  // buckets: the last 24 hours by hour, or calendar days ending today
@@ -269,13 +329,13 @@ const days=()=>RANGES.find(r=>r[0]===range)[2];
 function live(){if(!window.supabase||chan)return;
  sb=sb||window.supabase.createClient(C.url,C.key,{auth:{persistSession:false,autoRefreshToken:false}});sb.realtime.setAuth(ses.access_token);
  chan=sb.channel('opens-live').on('postgres_changes',{event:'INSERT',schema:'public',table:'opens'},({new:x})=>{
-   if(role!=='all'&&x.role!==role)return;if(new Date(x.at)<Date.now()-days()*864e5)return;
-   rows.unshift(x);fresh_ids.add(x.id);setTimeout(()=>fresh_ids.delete(x.id),3000);draw();ping(x);
-   toast(x.event==='unlock'?`${x.role==='admin'?'Admin':'Guest'} opened Beitna${x.city?' in '+x.city:''}`:`Lock screen opened${x.city?' in '+x.city:''}`);
+   if(role!=='all'&&x.role!==role&&x.event!=='fail')return;if(new Date(x.at)<Date.now()-days()*864e5)return;
+   rows.unshift(x);fresh_ids.add(x.id);setTimeout(()=>fresh_ids.delete(x.id),3000);draw();ping(x);if(devOpen)showDev(devOpen);
+   toast(x.event==='unlock'?`${x.role==='admin'?'Admin':'Guest'} opened Beitna${x.city?' in '+x.city:''}`:x.event==='fail'?`Wrong password${x.city?' from '+x.city:''}`:`Lock screen opened${x.city?' in '+x.city:''}`);
    $('upd').textContent='Updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})})
  .on('postgres_changes',{event:'*',schema:'public',table:'sessions'},({new:x})=>{if(!x||!x.id)return;if(role!=='all'&&x.role&&x.role!==role)return;const i=S2.findIndex(s=>s.id===x.id);if(i>=0)S2[i]={...S2[i],...x};else S2.unshift(x);autoName().then(drawActivity)})
  .on('postgres_changes',{event:'INSERT',schema:'public',table:'events'},({new:e})=>{if(!e)return;const x=S2.find(s=>s.id===e.session_id);if(role!=='all'&&x&&x.role!==role)return;
-   EV.unshift(e);const k='e'+e.at+e.name;fresh_ids.add(k);setTimeout(()=>fresh_ids.delete(k),3000);drawActivity()})
+   EV.unshift(e);const k='e'+e.at+e.name;fresh_ids.add(k);setTimeout(()=>fresh_ids.delete(k),3000);drawActivity();if(devOpen)showDev(devOpen)})
  .subscribe(st=>{const el=$('live');el.classList.toggle('on',st==='SUBSCRIBED');el.textContent=st==='SUBSCRIBED'?'Live':st==='CHANNEL_ERROR'||st==='TIMED_OUT'?'Reconnecting…':'Connecting…';
    if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'){stopLive();setTimeout(()=>{if(ses)fresh().then(live).catch(()=>{})},4000)}})}
 function stopLive(){if(chan&&sb)sb.removeChannel(chan);chan=null}
