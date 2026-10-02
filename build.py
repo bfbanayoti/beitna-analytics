@@ -37,7 +37,7 @@ def build():
 
 
 def unpack():
-    p = json.loads(re.search(r'const PAYLOAD=(\{.*?\});', open(path('index.html'), encoding='utf-8').read(), re.S).group(1))
+    p = json.loads(re.search(r'const PAYLOAD=(\{.*?\})[,;]', open(path('index.html'), encoding='utf-8').read(), re.S).group(1))
     d = lambda k: base64.b64decode(p[k])
     try:
         key = AESGCM(kek(getpass.getpass('Password: '), d('salt'))).decrypt(d('wiv'), d('key'), None)
