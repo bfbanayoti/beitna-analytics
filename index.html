@@ -72,7 +72,7 @@ th{text-align:start;font-size:11.5px;font-weight:600;letter-spacing:.06em;text-t
 td{padding:9px 10px;border-bottom:.5px solid var(--hairline);white-space:nowrap;font-variant-numeric:tabular-nums}
 .tablewrap{overflow-x:auto;margin-inline:-6px}
 .tag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600}.tag::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
-.tag.admin{color:var(--clay)}.tag.guest{color:var(--sage-ink)}.tag.view{color:var(--ink-3)}
+.tag.admin{color:var(--clay)}.tag.bad{color:var(--danger)}tr.click{cursor:pointer}tr.click:hover td{background:var(--fill)}.tag.guest{color:var(--sage-ink)}.tag.view{color:var(--ink-3)}
 .live{font-style:normal;display:inline-flex;align-items:center;gap:5px;font-weight:600;color:var(--ink-3)}.live::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
 .live.on{color:var(--sage-ink)}.live.on::before{box-shadow:0 0 0 0 currentColor;animation:pulse 1.8s infinite}
 @keyframes pulse{0%{box-shadow:0 0 0 0 oklch(62% .11 158/.5)}100%{box-shadow:0 0 0 8px oklch(62% .11 158/0)}}
@@ -156,7 +156,7 @@ ol{margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:6px
     <div class="card chart"><div class="lbl">Opens over time</div><div id="chart"></div><div class="legend"><span><i style="background:var(--clay)"></i>Unlocked</span><span><i style="background:var(--fill-2)"></i>Lock screen views</span></div></div>
     <div class="side"><div class="card"><div class="lbl">Devices</div><div class="rows" id="devices"></div></div><div class="card"><div class="lbl">How they unlock</div><div class="rows" id="methods"></div></div></div>
   </div>
-  <div class="card" style="margin-top:14px"><div class="lbl">Recent opens</div><div class="tablewrap"><table><thead><tr><th>Time</th><th>Event</th><th>Place</th><th>Device</th><th>Browser</th><th>From</th></tr></thead><tbody id="recent"></tbody></table></div></div>
+  <div class="card" style="margin-top:14px"><div class="lbl">Recent opens</div><div class="tablewrap"><table><thead><tr><th>Time</th><th>Event</th><th>Who</th><th>Place</th><th>Device</th><th>Browser</th><th>From</th></tr></thead><tbody id="recent"></tbody></table></div></div>
   <div class="foot">Live: new opens appear the moment they happen. Locations are approximate (city level, from the visitor's network). IP addresses are not stored.</div>
 </div></div>
 <script>
@@ -200,8 +200,12 @@ function draw(){const un=rows.filter(x=>x.event==='unlock'),vw=rows.filter(x=>x.
  list('countries',count(rows,x=>x.country).slice(0,8));
  list('devices',count(un,x=>[x.device,x.browser].filter(Boolean).join(' · ')).slice(0,6));
  list('methods',count(un,x=>({password:'Password',faceid:'Face ID',remembered:'Remembered device'})[x.method]).slice(0,4));
- $('recent').innerHTML=rows.slice(0,60).map(x=>`<tr class="${fresh_ids.has(x.id)?'new':''}"><td>${new Date(x.at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
-  <td>${x.event==='unlock'?`<span class="tag ${x.role}">${x.role==='admin'?'Admin':'Guest'}</span>`:'<span class="tag view">Lock screen</span>'}</td><td>${esc(place(x))}</td><td>${esc([x.device,x.os].filter(Boolean).join(' '))}</td><td>${esc(x.browser||'')}</td><td>${x.standalone?'Home Screen':'Browser'}</td></tr>`).join('')||`<tr><td colspan="6" class="muted">No opens in this period.</td></tr>`;
+ // guest numbers match the Guests card (oldest guest = Guest 1); owner devices show their name
+ const gList=guestList(),gNum=new Map(gList.map((d,i)=>[d.id,gList.length-i])),adminIds=new Set(devices().filter(d=>d.roles.has('admin')).map(d=>d.id));
+ const whoOf=x=>!x.device_id?'—':adminIds.has(x.device_id)?(NAMES[x.device_id]||'Your device'):gNum.has(x.device_id)?'Guest '+gNum.get(x.device_id):'—';
+ const evTag=x=>x.event==='unlock'?`<span class="tag ${x.role}">${x.role==='admin'?'Admin':'Guest'} unlocked</span>`:x.event==='fail'?'<span class="tag bad">Wrong password</span>':'<span class="tag view">Lock screen</span>';
+ $('recent').innerHTML=rows.slice(0,80).map(x=>`<tr class="${fresh_ids.has(x.id)?'new':''} ${x.device_id?'click':''}" ${x.device_id?`data-dev="${esc(x.device_id)}"`:''}><td>${new Date(x.at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'})}</td>
+  <td>${evTag(x)}</td><td>${esc(whoOf(x))}</td><td>${esc(place(x))}</td><td>${esc([x.device,x.os].filter(Boolean).join(' '))}</td><td>${esc(x.browser||'')}</td><td>${x.standalone?'Home Screen':'Browser'}</td></tr>`).join('')||`<tr><td colspan="7" class="muted">No opens in this period.</td></tr>`;
  chart();mapDraw();drawActivity();drawAttempts()}
 // ---- activity: labels, live feed, saved devices, sessions ----
 const ACT={route:'Changed tab',add:'Started an expense',addincome:'Started income',quick:'Opened + menu',savetx:'Saved an expense',savetxedit:'Edited a transaction',tx:'Opened a transaction',
@@ -235,10 +239,8 @@ function drawActivity(){const byS=new Map(S2.map(x=>[x.id,x]));
  $('feed').innerHTML=EV.slice(0,40).map(e=>{const x=byS.get(e.session_id)||{};const d=x.device_id?devName({id:x.device_id,device:x.device,os:x.os,browser:x.browser}):(x.device||'');
   return `<div class="ev ${fresh_ids.has('e'+e.at+e.name)?'new':''}"><span class="dot who ${x.role||'none'}">${initial(x.role)}</span><span>${esc(evLabel(e))}</span><time>${ago(e.at)}</time><small>${esc([x.role==='admin'?'Admin':x.role==='guest'?'Guest':'',x.city,d].filter(Boolean).join(' · '))}</small></div>`}).join('')||'<div class="muted small" style="padding:8px 0">No activity yet. It appears here as people use the app.</div>';
  // guests = devices that used the guest password, or only ever got it wrong. Each device is one person.
- const dv=devices(),gd=dv.filter(d=>!d.roles.has('admin')),seen=new Set(dv.map(d=>d.id)),fl=rows.filter(x=>x.event==='fail'&&x.device_id);
- const failOnly=new Map();fl.forEach(x=>{if(seen.has(x.device_id))return;const f=failOnly.get(x.device_id)||{id:x.device_id,device:x.device,os:x.os,browser:x.browser,first:x.at,last:x.at,city:place(x),n:0,roles:new Set(),fails:0,never:true};f.fails++;if(x.at<f.first)f.first=x.at;if(x.at>f.last){f.last=x.at;f.city=place(x)}failOnly.set(x.device_id,f)});
- const fails=id=>fl.filter(x=>x.device_id===id).length,steps=id=>EV.filter(e=>S2.some(s=>s.id===e.session_id&&s.device_id===id)).length;
- const guests=[...gd.map(d=>({...d,fails:fails(d.id)})),...failOnly.values()].sort((a,b)=>a.last<b.last?1:-1);
+ const dv=devices(),fl=rows.filter(x=>x.event==='fail'&&x.device_id);
+ const guests=guestList(),steps=id=>EV.filter(e=>S2.some(s=>s.id===e.session_id&&s.device_id===id)).length;
  $('devs').innerHTML=guests.map((d,i)=>`<div class="dv" data-dev="${esc(d.id)}"><b>Guest ${guests.length-i} · ${esc([d.device,d.os].filter(Boolean).join(' '))}</b><span class="go">History ›</span>
   <div class="chips">${d.never?'<span class="chipx bad">Never got in</span>':`<span class="chipx guest">${d.n} unlock${d.n===1?'':'s'}</span>`}${d.fails?`<span class="chipx bad">${d.fails} wrong password${d.fails===1?'':'s'}</span>`:''}${d.never?'':`<span class="chipx">${steps(d.id)} steps</span>`}</div>
   <div class="meta">${d.city&&d.city!=='Unknown'?esc(d.city)+' · ':''}last ${ago(d.last)} · first seen ${new Date(d.first).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}${d.browser?' · '+esc(d.browser):''}</div></div>`).join('')
@@ -267,6 +269,11 @@ function drawAttempts(){const who=x=>x.device_id||[x.device,x.os,x.browser,x.cit
   ${stat('Success rate',un.length+fl.length?Math.round(un.length/(un.length+fl.length)*100)+'%':'—','of password attempts')}
   ${stat('Admin unlocks',fmt(a.length),'you, for reference')}</div>
   ${fl.length?`<div class="flist">${fl.slice(0,8).map(x=>`<span>${new Date(x.at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})} · ${esc(place(x))} · ${esc([x.device,x.os].filter(Boolean).join(' '))}</span>`).join('')}</div>`:''}`}
+// guests = devices that used the guest password or only ever got it wrong; one device = one person
+function guestList(){const dv=devices(),gd=dv.filter(d=>!d.roles.has('admin')),seen=new Set(dv.map(d=>d.id)),fl=rows.filter(x=>x.event==='fail'&&x.device_id);
+ const failOnly=new Map();fl.forEach(x=>{if(seen.has(x.device_id))return;const f=failOnly.get(x.device_id)||{id:x.device_id,device:x.device,os:x.os,browser:x.browser,first:x.at,last:x.at,city:place(x),n:0,roles:new Set(),fails:0,never:true};f.fails++;if(x.at<f.first)f.first=x.at;if(x.at>f.last){f.last=x.at;f.city=place(x)}failOnly.set(x.device_id,f)});
+ const fails=id=>fl.filter(x=>x.device_id===id).length;
+ return[...gd.map(d=>({...d,fails:fails(d.id)})),...failOnly.values()].sort((a,b)=>a.last<b.last?1:-1)}
 function avgLen(){const l=S2.map(x=>(new Date(x.last_at)-new Date(x.started_at))/60000);const a=l.reduce((s,x)=>s+x,0)/(l.length||1);return a<1?'under a minute':Math.round(a)+' min'}
 document.addEventListener('click',e=>{const s=e.target.closest('[data-ses]'),r=e.target.closest('[data-ren]'),dv=e.target.closest('[data-dev]'),x=e.target.closest('[data-x]');
  if(r){rename(r.dataset.ren);return}if(x||e.target.id==='ovl'){closeDev();return}if(s){const id=s.dataset.ses;openSess.has(id)?openSess.delete(id):openSess.add(id);drawActivity();if(devOpen)showDev(devOpen);return}if(dv)showDev(dv.dataset.dev)});
