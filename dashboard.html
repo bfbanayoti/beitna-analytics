@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#f6efe6">
+<title>Beitna Analytics</title>
+<link rel="icon" href="logo.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<style>
+/* Beitna Analytics: who opens the app, from where. Reads Supabase table public.opens (owner-only via RLS). */
+:root{
+  --bg:oklch(95.6% .018 75); --bg-2:oklch(91% .03 60); --ink:oklch(21% .02 50); --ink-2:oklch(21% .02 50/.6); --ink-3:oklch(21% .02 50/.38);
+  --hairline:oklch(21% .02 50/.09); --fill:oklch(40% .03 60/.07); --fill-2:oklch(40% .03 60/.13);
+  --card:oklch(99.2% .006 80/.8); --clay:oklch(50% .125 34); --clay-2:oklch(42% .115 31); --gold:oklch(80% .085 80); --gold-ink:oklch(58% .1 75);
+  --sage:oklch(62% .11 158); --sage-ink:oklch(46% .09 158); --amber:oklch(74% .13 70); --danger:oklch(58% .2 25);
+  --espresso:oklch(22% .022 45); --shadow:0 1px 1px oklch(30% .03 50/.03),0 8px 24px oklch(30% .03 50/.05);
+  --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif; --display:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:oklch(17% .012 50); --bg-2:oklch(13% .01 50); --ink:oklch(96% .01 80); --ink-2:oklch(96% .01 80/.62); --ink-3:oklch(96% .01 80/.4);
+  --hairline:oklch(96% .01 80/.1); --fill:oklch(96% .01 80/.07); --fill-2:oklch(96% .01 80/.13); --card:oklch(24% .012 50/.85);
+  --clay:oklch(62% .14 40); --sage:oklch(72% .12 158); --sage-ink:oklch(80% .1 158); --shadow:0 8px 24px rgb(0 0 0/.3); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:oklch(17% .012 50); --bg-2:oklch(13% .01 50); --ink:oklch(96% .01 80); --ink-2:oklch(96% .01 80/.62); --ink-3:oklch(96% .01 80/.4);
+  --hairline:oklch(96% .01 80/.1); --fill:oklch(96% .01 80/.07); --fill-2:oklch(96% .01 80/.13); --card:oklch(24% .012 50/.85);
+  --clay:oklch(62% .14 40); --sage:oklch(72% .12 158); --sage-ink:oklch(80% .1 158); --shadow:0 8px 24px rgb(0 0 0/.3); color-scheme:dark}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;min-height:100dvh;color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;
+  background:radial-gradient(60% 40% at 95% 0%,oklch(82% .08 45/.45),transparent 70%),radial-gradient(50% 40% at 0% 40%,oklch(88% .06 150/.35),transparent 70%),linear-gradient(180deg,var(--bg),var(--bg-2));background-attachment:fixed}
+button,input,select{font:inherit;color:inherit}
+[hidden]{display:none!important}
+.wrap{max-width:1180px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 18px) 16px 48px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.brand{display:flex;align-items:center;gap:10px}.brand img{width:36px;height:36px;border-radius:10px;box-shadow:0 4px 12px oklch(45% .13 35/.3)}
+.brand b{font-family:var(--display);font-size:21px;font-weight:700;letter-spacing:-.02em}.brand span{display:block;font-size:12px;color:var(--ink-2)}
+.ctrls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.seg{display:flex;gap:2px;padding:3px;border-radius:999px;background:var(--fill)}
+.seg button{border:0;background:none;padding:6px 13px;border-radius:999px;font-size:13.5px;font-weight:500;color:var(--ink-2);cursor:pointer;white-space:nowrap}
+.seg button.on{background:var(--card);color:var(--ink);font-weight:650;box-shadow:0 2px 8px oklch(30% .04 50/.12)}
+.btn{border:.5px solid var(--hairline);background:var(--card);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13.5px;cursor:pointer}
+.btn.pri{background:linear-gradient(180deg,var(--clay),var(--clay-2));color:#fff;border-color:transparent;box-shadow:inset 0 1px 0 rgb(255 255 255/.18)}
+.muted{color:var(--ink-2)}.small{font-size:12.5px}
+.grid{display:grid;gap:14px}
+.kpis{grid-template-columns:repeat(5,minmax(0,1fr))}
+.card{background:var(--card);border:.5px solid var(--hairline);border-radius:22px;padding:16px 18px;box-shadow:var(--shadow);min-width:0;
+  -webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%)}
+.lbl{font-size:11.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2)}
+.kpi .v{font-family:var(--display);font-size:32px;font-weight:300;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin-top:4px}
+.kpi .s{font-size:12.5px;color:var(--ink-2)}
+.kpi.hero{color:oklch(96% .015 80);border-color:oklch(80% .085 80/.3);background:radial-gradient(120% 90% at 100% 0%,oklch(42% .1 40/.9),transparent 60%),linear-gradient(160deg,oklch(27% .025 45),var(--espresso))}
+.kpi.hero .lbl,.kpi.hero .s{color:oklch(90% .04 80/.7)}.kpi.hero .v{color:#fff}
+.main{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);margin-top:14px}
+#map{height:420px;border-radius:16px;overflow:hidden;margin-top:10px;background:var(--fill)}
+.leaflet-container{font-family:var(--sans)}
+.side{display:flex;flex-direction:column;gap:14px}
+.rows{display:flex;flex-direction:column;margin-top:8px}
+.r{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;padding:8px 0;border-top:.5px solid var(--hairline);font-size:14px}
+.r:first-child{border-top:0}.r b{font-variant-numeric:tabular-nums;font-weight:600}
+.r .bar{grid-column:1/-1;height:4px;border-radius:9px;background:var(--fill-2);overflow:hidden}.r .bar i{display:block;height:100%;border-radius:9px;background:var(--gold-ink)}
+.r .sub{font-size:12px;color:var(--ink-2)}
+.chart svg{display:block;width:100%;height:auto;margin-top:10px}
+.chart text{fill:var(--ink-3);font-size:10px;font-family:var(--sans)}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--ink-2);margin-top:6px}.legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-inline-end:5px}
+.split{display:flex;height:10px;border-radius:9px;overflow:hidden;gap:2px;margin-top:10px}.split i{display:block}
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px}
+th{text-align:start;font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);padding:8px 10px;border-bottom:.5px solid var(--hairline);white-space:nowrap}
+td{padding:9px 10px;border-bottom:.5px solid var(--hairline);white-space:nowrap;font-variant-numeric:tabular-nums}
+.tablewrap{overflow-x:auto;margin-inline:-6px}
+.tag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600}.tag::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.tag.admin{color:var(--clay)}.tag.guest{color:var(--sage-ink)}.tag.view{color:var(--ink-3)}
+.live{font-style:normal;display:inline-flex;align-items:center;gap:5px;font-weight:600;color:var(--ink-3)}.live::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.live.on{color:var(--sage-ink)}.live.on::before{box-shadow:0 0 0 0 currentColor;animation:pulse 1.8s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 oklch(62% .11 158/.5)}100%{box-shadow:0 0 0 8px oklch(62% .11 158/0)}}
+.brand em{font-style:normal}
+tr.new td{animation:newrow 2.4s ease-out}@keyframes newrow{0%{background:oklch(80% .085 80/.45)}100%{background:transparent}}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);transform:translateX(-50%);z-index:1000;padding:11px 18px;border-radius:999px;font-size:14px;font-weight:600;
+  background:var(--card);-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);box-shadow:0 12px 34px oklch(30% .04 50/.2);animation:tin .5s cubic-bezier(.32,1.4,.5,1) both;white-space:nowrap}
+@keyframes tin{from{opacity:0;transform:translate(-50%,12px) scale(.94)}}
+.leaflet-interactive.ping{animation:ping 1.2s ease-out 2}@keyframes ping{50%{stroke-width:8;stroke-opacity:.35}}
+.foot{margin-top:18px;font-size:12px;color:var(--ink-3);text-align:center}
+/* sign-in / setup */
+.gate{min-height:100dvh;display:grid;place-items:center;padding:24px 18px}
+.gate .card{width:100%;max-width:380px;display:flex;flex-direction:column;gap:12px;padding:24px}
+.gate img{width:64px;height:64px;border-radius:18px;align-self:center;box-shadow:0 14px 30px oklch(45% .13 35/.3)}
+.gate h1{margin:4px 0 0;text-align:center;font-size:26px;letter-spacing:-.02em}.gate p{margin:0;text-align:center}
+.gate input{height:50px;border-radius:14px;border:.5px solid var(--hairline);background:var(--fill);padding:0 14px;font-size:16px;outline:none}
+.gate input:focus{box-shadow:0 0 0 3px oklch(60% .145 40/.22)}
+.gate .btn.pri{height:50px;font-size:16px}
+.err{color:var(--danger);font-size:13.5px;font-weight:600;min-height:18px;text-align:center}
+ol{margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:6px;font-size:14px}code{font-size:12.5px;background:var(--fill);padding:1px 6px;border-radius:6px}
+@media (max-width:900px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi.hero{grid-column:1/-1}.main{grid-template-columns:minmax(0,1fr)}#map{height:300px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body>
+<div id="setup" class="gate" hidden><div class="card"><img src="logo.svg" alt=""><h1>Connect Supabase</h1>
+  <p class="muted">This dashboard isn't connected yet. Put the project URL and the public (anon) key in <code>config.js</code>.</p></div></div>
+<div id="login" class="gate" hidden><form class="card" id="lf"><img src="logo.svg" alt=""><h1>Beitna Analytics</h1><p class="muted">Owner sign-in</p>
+  <input id="em" type="email" autocomplete="username" placeholder="Email" required><input id="pw" type="password" autocomplete="current-password" placeholder="Password" required>
+  <button class="btn pri" id="go">Sign in</button><div class="err" id="err" role="alert"></div></form></div>
+<div id="dash" hidden><div class="wrap">
+  <header><div class="brand"><img src="logo.svg" alt=""><div><b>Beitna Analytics</b><span><i class="live" id="live">Connecting…</i> · <em id="upd">Loading…</em></span></div></div>
+   <div class="ctrls"><div class="seg" id="range"></div><div class="seg" id="roles"></div><button class="btn" id="out">Sign out</button></div></header>
+  <div class="grid kpis" id="kpis"></div>
+  <div class="grid main">
+    <div class="card"><div class="lbl">Where Beitna is opened</div><div id="map"></div><div class="legend"><span><i style="background:var(--clay)"></i>Admin</span><span><i style="background:var(--sage)"></i>Guest</span><span><i style="background:var(--ink-3)"></i>Lock screen only</span></div></div>
+    <div class="side"><div class="card"><div class="lbl">Top cities</div><div class="rows" id="cities"></div></div><div class="card"><div class="lbl">Countries</div><div class="rows" id="countries"></div></div></div>
+  </div>
+  <div class="grid main">
+    <div class="card chart"><div class="lbl">Opens over time</div><div id="chart"></div><div class="legend"><span><i style="background:var(--clay)"></i>Unlocked</span><span><i style="background:var(--fill-2)"></i>Lock screen views</span></div></div>
+    <div class="side"><div class="card"><div class="lbl">Devices</div><div class="rows" id="devices"></div></div><div class="card"><div class="lbl">How they unlock</div><div class="rows" id="methods"></div></div></div>
+  </div>
+  <div class="card" style="margin-top:14px"><div class="lbl">Recent opens</div><div class="tablewrap"><table><thead><tr><th>Time</th><th>Event</th><th>Place</th><th>Device</th><th>Browser</th><th>From</th></tr></thead><tbody id="recent"></tbody></table></div></div>
+  <div class="foot">Live: new opens appear the moment they happen. Locations are approximate (city level, from the visitor's network). IP addresses are not stored.</div>
+</div></div>
+<script>
+(()=>{
+const C=window.BEITNA_ANALYTICS||{},$=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const SK='beitna-analytics:session';let ses=null,range='7d',role='all',rows=[],map=null,layer=null,timer=null,sb=null,chan=null,fresh_ids=new Set();
+const RANGES=[['24h','24 h',1],['7d','7 days',7],['30d','30 days',30],['90d','90 days',90]],ROLES=[['all','Everyone'],['admin','Admin'],['guest','Guest']];
+const show=v=>{['setup','login','dash'].forEach(k=>$(k).hidden=k!==v)};
+const api=(path,opt={})=>fetch(C.url+path,{...opt,headers:{apikey:C.key,'Content-Type':'application/json',...(ses?{Authorization:'Bearer '+ses.access_token}:{}),...(opt.headers||{})}});
+async function auth(body,grant){const r=await fetch(`${C.url}/auth/v1/token?grant_type=${grant}`,{method:'POST',headers:{apikey:C.key,'Content-Type':'application/json'},body:JSON.stringify(body)});
+ const j=await r.json();if(!r.ok)throw new Error(j.error_description||j.msg||'Sign-in failed');ses={access_token:j.access_token,refresh_token:j.refresh_token,exp:Date.now()+j.expires_in*1000-60000};
+ try{localStorage.setItem(SK,JSON.stringify(ses))}catch(e){}return ses}
+async function fresh(){if(ses&&Date.now()>ses.exp){await auth({refresh_token:ses.refresh_token},'refresh_token');if(sb)sb.realtime.setAuth(ses.access_token)}}
+async function load(){await fresh();const days=RANGES.find(r=>r[0]===range)[2],since=new Date(Date.now()-days*864e5).toISOString();
+ let q=`/rest/v1/opens?select=*&at=gte.${encodeURIComponent(since)}&order=at.desc&limit=10000`;if(role!=='all')q+=`&role=eq.${role}`; // a role filter shows that role's unlocks only
+ const r=await api(q);if(r.status===401){signOut();return}if(!r.ok)throw new Error('Could not load data ('+r.status+')');
+ rows=await r.json();draw();
+ $('upd').textContent='Updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
+const fmt=n=>new Intl.NumberFormat('en-US').format(n),pct=(a,b)=>b?Math.round(a/b*100)+'%':'—';
+const place=x=>[x.city,x.country].filter(Boolean).join(', ')||'Unknown';
+function list(el,pairs,total,sub){$(el).innerHTML=pairs.length?pairs.map(([k,v,s])=>`<div class="r"><span>${esc(k)}${s?`<div class="sub">${esc(s)}</div>`:''}</span><b>${fmt(v)}</b><div class="bar"><i style="width:${v/(pairs[0][1]||1)*100}%"></i></div></div>`).join(''):`<div class="muted small" style="padding:8px 0">No data yet.</div>`}
+const count=(arr,f)=>{const m=new Map();arr.forEach(x=>{const k=f(x);if(k)m.set(k,(m.get(k)||0)+1)});return[...m].sort((a,b)=>b[1]-a[1])};
+function draw(){const un=rows.filter(x=>x.event==='unlock'),vw=rows.filter(x=>x.event==='view'),ad=un.filter(x=>x.role==='admin').length,gu=un.filter(x=>x.role==='guest').length;
+ const places=new Set(rows.map(place).filter(p=>p!=='Unknown')),home=un.filter(x=>x.standalone).length;
+ const failed=Math.max(0,vw.length-un.length);
+ $('kpis').innerHTML=[
+  ['hero','Unlocked',fmt(un.length),`${fmt(ad)} admin · ${fmt(gu)} guest`],
+  ['','Lock screen views',fmt(vw.length),`${fmt(failed)} without unlocking`],
+  ['','Places',fmt(places.size),`${count(rows,x=>x.country).length} countries`],
+  ['','From the Home Screen',pct(home,un.length),'of unlocks'],
+  ['','Last open',un[0]?ago(un[0].at):'—',un[0]?place(un[0]):'']].map(([c,l,v,s])=>`<div class="card kpi ${c}"><div class="lbl">${l}</div><div class="v">${v}</div><div class="s">${esc(s)}</div></div>`).join('');
+ list('cities',count(rows,x=>x.city?`${x.city}|${x.country||''}`:null).slice(0,8).map(([k,v])=>{const[c,co]=k.split('|');return[c,v,co]}));
+ list('countries',count(rows,x=>x.country).slice(0,8));
+ list('devices',count(un,x=>[x.device,x.browser].filter(Boolean).join(' · ')).slice(0,6));
+ list('methods',count(un,x=>({password:'Password',faceid:'Face ID',remembered:'Remembered device'})[x.method]).slice(0,4));
+ $('recent').innerHTML=rows.slice(0,60).map(x=>`<tr class="${fresh_ids.has(x.id)?'new':''}"><td>${new Date(x.at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
+  <td>${x.event==='unlock'?`<span class="tag ${x.role}">${x.role==='admin'?'Admin':'Guest'}</span>`:'<span class="tag view">Lock screen</span>'}</td><td>${esc(place(x))}</td><td>${esc([x.device,x.os].filter(Boolean).join(' '))}</td><td>${esc(x.browser||'')}</td><td>${x.standalone?'Home Screen':'Browser'}</td></tr>`).join('')||`<tr><td colspan="6" class="muted">No opens in this period.</td></tr>`;
+ chart();mapDraw()}
+function ago(t){const s=(Date.now()-new Date(t))/1000;return s<90?'just now':s<3600?Math.round(s/60)+' min ago':s<86400?Math.round(s/3600)+' h ago':Math.round(s/86400)+' d ago'}
+function chart(){const days=RANGES.find(r=>r[0]===range)[2],hourly=days===1,n=hourly?24:days,step=hourly?36e5:864e5;
+ // buckets: the last 24 hours by hour, or calendar days ending today
+ const start=hourly?Date.now()-24*36e5:new Date(new Date().toDateString()).getTime()-(n-1)*864e5;
+ const b=Array.from({length:n},()=>({u:0,v:0}));rows.forEach(x=>{const k=Math.min(n-1,Math.max(0,Math.floor((new Date(x.at)-start)/step)));if(x.event==='unlock')b[k].u++;else b[k].v++});
+ const W=640,H=180,pb=22,max=Math.max(1,...b.map(x=>Math.max(x.u,x.v))),bw=W/n;let g='';
+ b.forEach((x,i)=>{const hv=(H-pb-8)*x.v/max,hu=(H-pb-8)*x.u/max,X=i*bw;g+=`<rect x="${X+bw*.12}" y="${H-pb-hv}" width="${bw*.76}" height="${hv}" rx="3" fill="var(--fill-2)"/><rect x="${X+bw*.28}" y="${H-pb-hu}" width="${bw*.44}" height="${hu}" rx="3" fill="var(--clay)"><title>${x.u} unlocked, ${x.v} views</title></rect>`;
+  const every=n>30?14:n>8?Math.ceil(n/7):1;if(i%every===0||i===n-1){const d=new Date(start+i*step);g+=`<text x="${X+bw/2}" y="${H-6}" text-anchor="middle">${hourly?d.getHours()+':00':d.toLocaleDateString([],{month:'short',day:'numeric'})}</text>`}});
+ $('chart').innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Opens over time">${g}</svg>`}
+function mapDraw(){if(!window.L)return;const dark=matchMedia('(prefers-color-scheme: dark)').matches;
+ if(!map){map=L.map('map',{zoomControl:true,attributionControl:true,scrollWheelZoom:false}).setView([31.95,35.93],4);
+  L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_${dark?'Dark':'Light'}_Gray_Base/MapServer/tile/{z}/{y}/{x}`,{maxZoom:16,attribution:'Tiles &copy; Esri'}).addTo(map)}
+ if(layer)layer.remove();layer=L.layerGroup().addTo(map);const by=new Map();
+ rows.filter(x=>x.lat!=null&&x.lon!=null).forEach(x=>{const k=x.lat+','+x.lon;const o=by.get(k)||{lat:+x.lat,lon:+x.lon,place:place(x),a:0,g:0,v:0};x.event==='view'?o.v++:x.role==='admin'?o.a++:o.g++;by.set(k,o)});
+ const css=getComputedStyle(document.documentElement),col=v=>css.getPropertyValue(v).trim();const pts=[...by.values()];
+ pts.forEach(o=>{const t=o.a+o.g+o.v,c=o.a>=o.g&&o.a?col('--clay'):o.g?col('--sage'):col('--ink-3');
+  L.circleMarker([o.lat,o.lon],{radius:6+Math.sqrt(t)*3,color:'#fff',weight:1.5,fillColor:c,fillOpacity:.85}).bindPopup(`<b>${esc(o.place)}</b><br>${o.a} admin · ${o.g} guest · ${o.v} lock-screen views`).addTo(layer)});
+ if(pts.length)map.fitBounds(L.latLngBounds(pts.map(o=>[o.lat,o.lon])).pad(.4),{maxZoom:9})}
+function segs(){$('range').innerHTML=RANGES.map(([k,l])=>`<button data-r="${k}" class="${k===range?'on':''}">${l}</button>`).join('');
+ $('roles').innerHTML=ROLES.map(([k,l])=>`<button data-o="${k}" class="${k===role?'on':''}">${l}</button>`).join('')}
+document.addEventListener('click',e=>{const r=e.target.closest('[data-r]'),o=e.target.closest('[data-o]');if(r){range=r.dataset.r;segs();load().catch(err)}if(o){role=o.dataset.o;segs();load().catch(err)}});
+const err=e=>{$('upd').textContent=e.message};
+function signOut(){stopLive();ses=null;try{localStorage.removeItem(SK)}catch(e){}clearInterval(timer);show('login')}
+$('out').onclick=signOut;
+$('lf').onsubmit=async e=>{e.preventDefault();$('err').textContent='';$('go').disabled=true;
+ try{await auth({email:$('em').value.trim(),password:$('pw').value},'password');start()}catch(x){$('err').textContent=x.message}$('go').disabled=false};
+function start(){show('dash');segs();load().catch(err);clearInterval(timer);timer=setInterval(()=>load().catch(err),5*60000);live()}
+// ---- real time: Supabase Realtime pushes each new row as it's inserted (RLS applies, so only the owner receives them) ----
+const days=()=>RANGES.find(r=>r[0]===range)[2];
+function live(){if(!window.supabase||chan)return;
+ sb=sb||window.supabase.createClient(C.url,C.key,{auth:{persistSession:false,autoRefreshToken:false}});sb.realtime.setAuth(ses.access_token);
+ chan=sb.channel('opens-live').on('postgres_changes',{event:'INSERT',schema:'public',table:'opens'},({new:x})=>{
+   if(role!=='all'&&x.role!==role)return;if(new Date(x.at)<Date.now()-days()*864e5)return;
+   rows.unshift(x);fresh_ids.add(x.id);setTimeout(()=>fresh_ids.delete(x.id),3000);draw();ping(x);
+   toast(x.event==='unlock'?`${x.role==='admin'?'Admin':'Guest'} opened Beitna${x.city?' in '+x.city:''}`:`Lock screen opened${x.city?' in '+x.city:''}`);
+   $('upd').textContent='Updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})})
+ .subscribe(st=>{const el=$('live');el.classList.toggle('on',st==='SUBSCRIBED');el.textContent=st==='SUBSCRIBED'?'Live':st==='CHANNEL_ERROR'||st==='TIMED_OUT'?'Reconnecting…':'Connecting…';
+   if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'){stopLive();setTimeout(()=>{if(ses)fresh().then(live).catch(()=>{})},4000)}})}
+function stopLive(){if(chan&&sb)sb.removeChannel(chan);chan=null}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&ses){fresh().then(()=>{load().catch(err);if(!chan)live()}).catch(()=>{})}});
+let tT;function toast(m){document.querySelector('.toast')?.remove();const d=document.createElement('div');d.className='toast';d.textContent=m;document.body.appendChild(d);clearTimeout(tT);tT=setTimeout(()=>d.remove(),3500)}
+function ping(x){if(!map||x.lat==null)return;map.panTo([+x.lat,+x.lon],{animate:true});setTimeout(()=>document.querySelectorAll('#map .leaflet-interactive').forEach(p=>{p.classList.remove('ping');void p.getBBox;p.classList.add('ping')}),50)}
+if(!C.url||!C.key){show('setup');return}
+try{ses=JSON.parse(localStorage.getItem(SK))}catch(e){}
+if(ses){fresh().then(start).catch(()=>signOut())}else show('login');
+})();
+</script></body></html>
