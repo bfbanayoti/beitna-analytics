@@ -73,3 +73,10 @@ end $$;
 
 revoke all on function public.log_open from public;
 grant execute on function public.log_open to anon, authenticated;
+
+-- Real-time: stream new rows to the signed-in dashboard (row-level security still applies).
+do $$ begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'opens') then
+    alter publication supabase_realtime add table public.opens;
+  end if;
+end $$;

@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <style>
 /* Beitna Analytics: who opens the app, from where. Reads Supabase table public.opens (owner-only via RLS). */
@@ -72,6 +73,15 @@ td{padding:9px 10px;border-bottom:.5px solid var(--hairline);white-space:nowrap;
 .tablewrap{overflow-x:auto;margin-inline:-6px}
 .tag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600}.tag::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
 .tag.admin{color:var(--clay)}.tag.guest{color:var(--sage-ink)}.tag.view{color:var(--ink-3)}
+.live{font-style:normal;display:inline-flex;align-items:center;gap:5px;font-weight:600;color:var(--ink-3)}.live::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.live.on{color:var(--sage-ink)}.live.on::before{box-shadow:0 0 0 0 currentColor;animation:pulse 1.8s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 oklch(62% .11 158/.5)}100%{box-shadow:0 0 0 8px oklch(62% .11 158/0)}}
+.brand em{font-style:normal}
+tr.new td{animation:newrow 2.4s ease-out}@keyframes newrow{0%{background:oklch(80% .085 80/.45)}100%{background:transparent}}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);transform:translateX(-50%);z-index:1000;padding:11px 18px;border-radius:999px;font-size:14px;font-weight:600;
+  background:var(--card);-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);box-shadow:0 12px 34px oklch(30% .04 50/.2);animation:tin .5s cubic-bezier(.32,1.4,.5,1) both;white-space:nowrap}
+@keyframes tin{from{opacity:0;transform:translate(-50%,12px) scale(.94)}}
+.leaflet-interactive.ping{animation:ping 1.2s ease-out 2}@keyframes ping{50%{stroke-width:8;stroke-opacity:.35}}
 .foot{margin-top:18px;font-size:12px;color:var(--ink-3);text-align:center}
 /* sign-in / setup */
 .gate{min-height:100dvh;display:grid;place-items:center;padding:24px 18px}
@@ -92,7 +102,7 @@ ol{margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:6px
   <input id="em" type="email" autocomplete="username" placeholder="Email" required><input id="pw" type="password" autocomplete="current-password" placeholder="Password" required>
   <button class="btn pri" id="go">Sign in</button><div class="err" id="err" role="alert"></div></form></div>
 <div id="dash" hidden><div class="wrap">
-  <header><div class="brand"><img src="logo.svg" alt=""><div><b>Beitna Analytics</b><span id="upd">Loading…</span></div></div>
+  <header><div class="brand"><img src="logo.svg" alt=""><div><b>Beitna Analytics</b><span><i class="live" id="live">Connecting…</i> · <em id="upd">Loading…</em></span></div></div>
    <div class="ctrls"><div class="seg" id="range"></div><div class="seg" id="roles"></div><button class="btn" id="out">Sign out</button></div></header>
   <div class="grid kpis" id="kpis"></div>
   <div class="grid main">
@@ -104,19 +114,19 @@ ol{margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:6px
     <div class="side"><div class="card"><div class="lbl">Devices</div><div class="rows" id="devices"></div></div><div class="card"><div class="lbl">How they unlock</div><div class="rows" id="methods"></div></div></div>
   </div>
   <div class="card" style="margin-top:14px"><div class="lbl">Recent opens</div><div class="tablewrap"><table><thead><tr><th>Time</th><th>Event</th><th>Place</th><th>Device</th><th>Browser</th><th>From</th></tr></thead><tbody id="recent"></tbody></table></div></div>
-  <div class="foot">Locations are approximate (city level, from the visitor's network). IP addresses are not stored. Refreshes every minute.</div>
+  <div class="foot">Live: new opens appear the moment they happen. Locations are approximate (city level, from the visitor's network). IP addresses are not stored.</div>
 </div></div>
 <script>
 (()=>{
 const C=window.BEITNA_ANALYTICS||{},$=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const SK='beitna-analytics:session';let ses=null,range='7d',role='all',rows=[],map=null,layer=null,timer=null;
+const SK='beitna-analytics:session';let ses=null,range='7d',role='all',rows=[],map=null,layer=null,timer=null,sb=null,chan=null,fresh_ids=new Set();
 const RANGES=[['24h','24 h',1],['7d','7 days',7],['30d','30 days',30],['90d','90 days',90]],ROLES=[['all','Everyone'],['admin','Admin'],['guest','Guest']];
 const show=v=>{['setup','login','dash'].forEach(k=>$(k).hidden=k!==v)};
 const api=(path,opt={})=>fetch(C.url+path,{...opt,headers:{apikey:C.key,'Content-Type':'application/json',...(ses?{Authorization:'Bearer '+ses.access_token}:{}),...(opt.headers||{})}});
 async function auth(body,grant){const r=await fetch(`${C.url}/auth/v1/token?grant_type=${grant}`,{method:'POST',headers:{apikey:C.key,'Content-Type':'application/json'},body:JSON.stringify(body)});
  const j=await r.json();if(!r.ok)throw new Error(j.error_description||j.msg||'Sign-in failed');ses={access_token:j.access_token,refresh_token:j.refresh_token,exp:Date.now()+j.expires_in*1000-60000};
  try{localStorage.setItem(SK,JSON.stringify(ses))}catch(e){}return ses}
-async function fresh(){if(ses&&Date.now()>ses.exp)await auth({refresh_token:ses.refresh_token},'refresh_token')}
+async function fresh(){if(ses&&Date.now()>ses.exp){await auth({refresh_token:ses.refresh_token},'refresh_token');if(sb)sb.realtime.setAuth(ses.access_token)}}
 async function load(){await fresh();const days=RANGES.find(r=>r[0]===range)[2],since=new Date(Date.now()-days*864e5).toISOString();
  let q=`/rest/v1/opens?select=*&at=gte.${encodeURIComponent(since)}&order=at.desc&limit=10000`;if(role!=='all')q+=`&role=eq.${role}`; // a role filter shows that role's unlocks only
  const r=await api(q);if(r.status===401){signOut();return}if(!r.ok)throw new Error('Could not load data ('+r.status+')');
@@ -139,7 +149,7 @@ function draw(){const un=rows.filter(x=>x.event==='unlock'),vw=rows.filter(x=>x.
  list('countries',count(rows,x=>x.country).slice(0,8));
  list('devices',count(un,x=>[x.device,x.browser].filter(Boolean).join(' · ')).slice(0,6));
  list('methods',count(un,x=>({password:'Password',faceid:'Face ID',remembered:'Remembered device'})[x.method]).slice(0,4));
- $('recent').innerHTML=rows.slice(0,60).map(x=>`<tr><td>${new Date(x.at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
+ $('recent').innerHTML=rows.slice(0,60).map(x=>`<tr class="${fresh_ids.has(x.id)?'new':''}"><td>${new Date(x.at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
   <td>${x.event==='unlock'?`<span class="tag ${x.role}">${x.role==='admin'?'Admin':'Guest'}</span>`:'<span class="tag view">Lock screen</span>'}</td><td>${esc(place(x))}</td><td>${esc([x.device,x.os].filter(Boolean).join(' '))}</td><td>${esc(x.browser||'')}</td><td>${x.standalone?'Home Screen':'Browser'}</td></tr>`).join('')||`<tr><td colspan="6" class="muted">No opens in this period.</td></tr>`;
  chart();mapDraw()}
 function ago(t){const s=(Date.now()-new Date(t))/1000;return s<90?'just now':s<3600?Math.round(s/60)+' min ago':s<86400?Math.round(s/3600)+' h ago':Math.round(s/86400)+' d ago'}
@@ -164,11 +174,26 @@ function segs(){$('range').innerHTML=RANGES.map(([k,l])=>`<button data-r="${k}" 
  $('roles').innerHTML=ROLES.map(([k,l])=>`<button data-o="${k}" class="${k===role?'on':''}">${l}</button>`).join('')}
 document.addEventListener('click',e=>{const r=e.target.closest('[data-r]'),o=e.target.closest('[data-o]');if(r){range=r.dataset.r;segs();load().catch(err)}if(o){role=o.dataset.o;segs();load().catch(err)}});
 const err=e=>{$('upd').textContent=e.message};
-function signOut(){ses=null;try{localStorage.removeItem(SK)}catch(e){}clearInterval(timer);show('login')}
+function signOut(){stopLive();ses=null;try{localStorage.removeItem(SK)}catch(e){}clearInterval(timer);show('login')}
 $('out').onclick=signOut;
 $('lf').onsubmit=async e=>{e.preventDefault();$('err').textContent='';$('go').disabled=true;
  try{await auth({email:$('em').value.trim(),password:$('pw').value},'password');start()}catch(x){$('err').textContent=x.message}$('go').disabled=false};
-function start(){show('dash');segs();load().catch(err);clearInterval(timer);timer=setInterval(()=>load().catch(err),60000)}
+function start(){show('dash');segs();load().catch(err);clearInterval(timer);timer=setInterval(()=>load().catch(err),5*60000);live()}
+// ---- real time: Supabase Realtime pushes each new row as it's inserted (RLS applies, so only the owner receives them) ----
+const days=()=>RANGES.find(r=>r[0]===range)[2];
+function live(){if(!window.supabase||chan)return;
+ sb=sb||window.supabase.createClient(C.url,C.key,{auth:{persistSession:false,autoRefreshToken:false}});sb.realtime.setAuth(ses.access_token);
+ chan=sb.channel('opens-live').on('postgres_changes',{event:'INSERT',schema:'public',table:'opens'},({new:x})=>{
+   if(role!=='all'&&x.role!==role)return;if(new Date(x.at)<Date.now()-days()*864e5)return;
+   rows.unshift(x);fresh_ids.add(x.id);setTimeout(()=>fresh_ids.delete(x.id),3000);draw();ping(x);
+   toast(x.event==='unlock'?`${x.role==='admin'?'Admin':'Guest'} opened Beitna${x.city?' in '+x.city:''}`:`Lock screen opened${x.city?' in '+x.city:''}`);
+   $('upd').textContent='Updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})})
+ .subscribe(st=>{const el=$('live');el.classList.toggle('on',st==='SUBSCRIBED');el.textContent=st==='SUBSCRIBED'?'Live':st==='CHANNEL_ERROR'||st==='TIMED_OUT'?'Reconnecting…':'Connecting…';
+   if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'){stopLive();setTimeout(()=>{if(ses)fresh().then(live).catch(()=>{})},4000)}})}
+function stopLive(){if(chan&&sb)sb.removeChannel(chan);chan=null}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&ses){fresh().then(()=>{load().catch(err);if(!chan)live()}).catch(()=>{})}});
+let tT;function toast(m){document.querySelector('.toast')?.remove();const d=document.createElement('div');d.className='toast';d.textContent=m;document.body.appendChild(d);clearTimeout(tT);tT=setTimeout(()=>d.remove(),3500)}
+function ping(x){if(!map||x.lat==null)return;map.panTo([+x.lat,+x.lon],{animate:true});setTimeout(()=>document.querySelectorAll('#map .leaflet-interactive').forEach(p=>{p.classList.remove('ping');void p.getBBox;p.classList.add('ping')}),50)}
 if(!C.url||!C.key){show('setup');return}
 try{ses=JSON.parse(localStorage.getItem(SK))}catch(e){}
 if(ses){fresh().then(start).catch(()=>signOut())}else show('login');
